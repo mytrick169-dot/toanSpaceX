@@ -487,7 +487,17 @@ async function handleRouteChange() {
         apiFetch('/api/admin/pdfs'),
       ]);
       AppState.curriculum = curr;
-      renderAppShell(renderAdminPdfUploadView(aiStatus, curr, pdfsRes.pdfs), routePath);
+      const qChapterId = queryParams.get('chapterId') || '';
+      const qLessonId = queryParams.get('lessonId') || '';
+      const foundLesson = qLessonId
+        ? (curr.rawLessons || []).find((l) => Number(l.id) === Number(qLessonId))
+        : null;
+      const prefill = {
+        chapterId: qChapterId || foundLesson?.chapter_id || '',
+        lessonId: qLessonId,
+        title: foundLesson ? `BTVN - ${foundLesson.name}` : '',
+      };
+      renderAppShell(renderAdminPdfUploadView(aiStatus, curr, pdfsRes.pdfs, prefill), routePath);
       return;
     }
 
@@ -1219,6 +1229,66 @@ window.SpaceXApp = {
   },
 
   // ---------------- CẤU HÌNH GEMINI AI & UPLOAD PDF TỰ ĐỘNG TẠO ĐỀ ----------------
+  jumpToUploadForLesson(chapterId, lessonId) {
+    navigate(`#/admin/pdf-upload?chapterId=${chapterId}&lessonId=${lessonId}`);
+  },
+
+  onUploadChapterChange(chapterId) {
+    const lessonSelect = document.getElementById('upload-lesson-id');
+    if (!lessonSelect) return;
+    const rawLessons = AppState.curriculum?.rawLessons || [];
+    const filtered = rawLessons.filter((l) => Number(l.chapter_id) === Number(chapterId));
+    const groups = [];
+    const map = new Map();
+    for (const les of filtered) {
+      const gName = les.description || 'CÁC PHẦN HỌC';
+      if (!map.has(gName)) {
+        const gObj = { groupName: gName, items: [] };
+        map.set(gName, gObj);
+        groups.push(gObj);
+      }
+      map.get(gName).items.push(les);
+    }
+    lessonSelect.innerHTML =
+      `<option value="">-- Chọn Phần / Tiết học --</option>` +
+      groups
+        .map(
+          (grp) =>
+            `<optgroup label="${grp.groupName.replace(/"/g, '&quot;')}">${grp.items
+              .map((l) => `<option value="${l.id}">${l.name}</option>`)
+              .join('')}</optgroup>`
+        )
+        .join('');
+  },
+
+  onEditExamChapterChange(chapterId) {
+    const lessonSelect = document.getElementById('edit-exam-lesson');
+    if (!lessonSelect) return;
+    const rawLessons = AppState.curriculum?.rawLessons || [];
+    const filtered = rawLessons.filter((l) => Number(l.chapter_id) === Number(chapterId));
+    const groups = [];
+    const map = new Map();
+    for (const les of filtered) {
+      const gName = les.description || 'CÁC PHẦN HỌC';
+      if (!map.has(gName)) {
+        const gObj = { groupName: gName, items: [] };
+        map.set(gName, gObj);
+        groups.push(gObj);
+      }
+      map.get(gName).items.push(les);
+    }
+    lessonSelect.innerHTML =
+      `<option value="">-- Chọn Phần / Tiết học --</option>` +
+      groups
+        .map(
+          (grp) =>
+            `<optgroup label="${grp.groupName.replace(/"/g, '&quot;')}">${grp.items
+              .map((l) => `<option value="${l.id}">${l.name}</option>`)
+              .join('')}</optgroup>`
+        )
+        .join('');
+  },
+
   toggleAiConfigPanel() {
     const el = document.getElementById('ai-config-Collapse');
     if (el) el.classList.toggle('hidden');

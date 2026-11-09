@@ -388,16 +388,31 @@ export function renderStudentChaptersView(curriculum, selectedSubjectId = null) 
     ? subjects.filter((s) => s.id === Number(selectedSubjectId))
     : subjects;
 
+  const groupLessonsBySection = (lessons = []) => {
+    const groups = [];
+    const map = new Map();
+    for (const les of lessons) {
+      const gName = les.description || 'DANH SÁCH BÀI HỌC';
+      if (!map.has(gName)) {
+        const gObj = { groupName: gName, items: [] };
+        map.set(gName, gObj);
+        groups.push(gObj);
+      }
+      map.get(gName).items.push(les);
+    }
+    return groups;
+  };
+
   return `
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div class="text-xs text-blue-600 font-semibold mb-1">
-            Toán học THPT → Chọn Chương → Chọn Bài học → Luyện tập
+            Toán học 12 THPT → 12 Chương & Chuyên đề → Chọn Phần / Tiết học → Luyện tập
           </div>
-          <h1 class="text-2xl font-bold text-slate-900">Hệ thống Chương và Bài học</h1>
+          <h1 class="text-2xl font-bold text-slate-900">Lộ trình Chương & Phần học Toán 12</h1>
           <p class="text-sm text-slate-500 mt-1">
-            Chọn bài học bất kỳ để hiển thị các bộ bài tập và đề kiểm tra tương ứng.
+            Chọn đúng tiết học hoặc đề ôn tập bên dưới để làm bài tập về nhà (BTVN) và đề kiểm tra.
           </p>
         </div>
         <button onclick="window.SpaceXApp.navigate('#/student/exams')" class="btn btn-secondary">
@@ -408,43 +423,59 @@ export function renderStudentChaptersView(curriculum, selectedSubjectId = null) 
       ${filteredSubjects
         .map(
           (subj) => `
-        <div class="space-y-4">
-          <div class="flex items-center gap-2">
-            <span class="px-3 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold">${subj.name}</span>
-            <span class="text-sm text-slate-500">${subj.description || ''}</span>
-          </div>
-
-          <div class="grid grid-cols-1 gap-4">
-            ${subj.chapters
-              .map(
-                (ch) => `
-              <div class="card p-5">
-                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div class="space-y-6">
+          ${subj.chapters
+            .map((ch) => {
+              const groups = groupLessonsBySection(ch.lessons);
+              return `
+              <div class="card overflow-hidden border-2 border-slate-300 shadow-sm">
+                <!-- Banner Đỏ: Tên Chương / Chuyên đề lớn -->
+                <div class="bg-red-600 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 class="text-base font-bold text-slate-900">${ch.name}</h3>
-                    <p class="text-xs text-slate-500 mt-0.5">${ch.description || ''}</p>
+                    <h3 class="text-sm sm:text-base font-extrabold uppercase tracking-wide text-yellow-200">
+                      ${ch.name}
+                    </h3>
+                    <p class="text-xs text-red-100 mt-0.5">${ch.description || ''}</p>
                   </div>
-                  <button onclick="window.SpaceXApp.navigate('#/student/exams?chapterId=${ch.id}')" class="btn btn-secondary text-xs">
-                    Tất cả đề Chương này →
+                  <button onclick="window.SpaceXApp.navigate('#/student/exams?chapterId=${ch.id}')" class="px-3 py-1.5 rounded-lg bg-white text-red-700 font-bold text-xs hover:bg-yellow-50 transition">
+                    Tất cả đề chương này →
                   </button>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-                  ${ch.lessons
+                <!-- Các Nhóm [BÀI 1], [BÀI 2]... màu vàng & Danh sách Tiết học bên dưới -->
+                <div class="divide-y divide-slate-200">
+                  ${groups
                     .map(
-                      (les) => `
-                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 transition flex flex-col justify-between">
-                      <div>
-                        <div class="text-sm font-bold text-slate-900">${les.name}</div>
-                        <p class="text-xs text-slate-500 mt-1">${les.description || ''}</p>
+                      (grp) => `
+                    <div>
+                      <div class="bg-yellow-300 text-red-700 font-extrabold text-xs sm:text-sm uppercase px-4 py-2 text-center border-b border-slate-300">
+                        ${grp.groupName}
                       </div>
-                      <div class="mt-3 pt-2.5 border-t border-slate-200/70 flex items-center justify-between">
-                        <span class="text-xs font-medium text-blue-700">
-                          ${les.totalSets || 0} bộ đề hiện có
-                        </span>
-                        <button onclick="window.SpaceXApp.navigate('#/student/exams?chapterId=${ch.id}&lessonId=${les.id}')" class="text-xs font-bold text-blue-600 hover:underline">
-                          Luyện tập →
-                        </button>
+                      <div class="divide-y divide-slate-200 bg-white">
+                        ${grp.items
+                          .map(
+                            (les) => `
+                          <div class="px-4 py-2.5 hover:bg-blue-50/50 transition flex flex-wrap items-center justify-between gap-3">
+                            <div class="text-xs sm:text-sm font-medium text-slate-900">
+                              ${les.name}
+                            </div>
+                            <div class="flex items-center gap-3">
+                              ${
+                                (les.totalSets || 0) > 0
+                                  ? `<span class="badge badge-success">✓ Đã có ${les.totalSets} bộ đề</span>
+                                     <button onclick="window.SpaceXApp.navigate('#/student/exams?chapterId=${ch.id}&lessonId=${les.id}')" class="btn btn-primary text-xs py-1 px-3">
+                                       ✍️ Vào làm BTVN / Đề thi →
+                                     </button>`
+                                  : `<span class="text-xs text-slate-400">Chưa cập nhật đề</span>
+                                     <button onclick="window.SpaceXApp.navigate('#/student/exams?chapterId=${ch.id}&lessonId=${les.id}')" class="text-xs font-semibold text-blue-600 hover:underline">
+                                       Xem mục này
+                                     </button>`
+                              }
+                            </div>
+                          </div>
+                        `
+                          )
+                          .join('')}
                       </div>
                     </div>
                   `
@@ -452,10 +483,9 @@ export function renderStudentChaptersView(curriculum, selectedSubjectId = null) 
                     .join('')}
                 </div>
               </div>
-            `
-              )
-              .join('')}
-          </div>
+            `;
+            })
+            .join('')}
         </div>
       `
         )

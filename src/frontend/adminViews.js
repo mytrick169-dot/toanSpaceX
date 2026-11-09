@@ -304,27 +304,79 @@ export function renderAdminStudentsView(students = [], filters = {}) {
   `;
 }
 
+function renderGroupedLessonOptionsHtml(rawLessons = [], chapterId = null, selectedLessonId = null) {
+  const targetChId = Number(chapterId || 0);
+  const filtered = targetChId
+    ? rawLessons.filter((l) => Number(l.chapter_id) === targetChId)
+    : rawLessons;
+
+  const groups = [];
+  const map = new Map();
+  for (const les of filtered) {
+    const gName = les.description || 'CÁC PHẦN HỌC';
+    if (!map.has(gName)) {
+      const gObj = { groupName: gName, items: [] };
+      map.set(gName, gObj);
+      groups.push(gObj);
+    }
+    map.get(gName).items.push(les);
+  }
+
+  return `
+    <option value="">-- Chọn Phần / Tiết học --</option>
+    ${groups
+      .map(
+        (grp) => `
+      <optgroup label="${grp.groupName.replace(/"/g, '&quot;')}">
+        ${grp.items
+          .map(
+            (l) =>
+              `<option value="${l.id}" ${Number(selectedLessonId) === Number(l.id) ? 'selected' : ''}>${l.name}</option>`
+          )
+          .join('')}
+      </optgroup>
+    `
+      )
+      .join('')}
+  `;
+}
+
 /**
  * 13. TRANG QUẢN LÝ CHƯƠNG & BÀI HỌC (#/admin/curriculum)
  */
 export function renderAdminCurriculumView(curriculum) {
   const subjects = curriculum?.subjects || [];
 
+  const groupLessonsBySection = (lessons = []) => {
+    const groups = [];
+    const map = new Map();
+    for (const les of lessons) {
+      const gName = les.description || 'DANH SÁCH PHẦN HỌC';
+      if (!map.has(gName)) {
+        const gObj = { groupName: gName, items: [] };
+        map.set(gName, gObj);
+        groups.push(gObj);
+      }
+      map.get(gName).items.push(les);
+    }
+    return groups;
+  };
+
   return `
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold text-slate-900">Quản lý Chương trình học (Môn học → Chương → Bài học)</h1>
+          <h1 class="text-2xl font-bold text-slate-900">Lộ trình Chương & Phần học Toán 12 (12 Chương / Chuyên đề)</h1>
           <p class="text-sm text-slate-500 mt-1">
-            Tạo, chỉnh sửa, xóa và sắp xếp phân cấp Chương và Bài học cho môn Toán THPT.
+            Nhấn nút <strong>"📤 Upload PDF vào phần này"</strong> tại bất kỳ dòng nào để tải file PDF đề bài & đáp án vào đúng vị trí đó.
           </p>
         </div>
         <div class="flex items-center gap-2">
           <button onclick="window.SpaceXApp.openAddChapterModal()" class="btn btn-primary">
-            + Thêm Chương mới
+            + Thêm Chương / Chuyên đề
           </button>
           <button onclick="window.SpaceXApp.openAddLessonModal()" class="btn btn-secondary">
-            + Thêm Bài học mới
+            + Thêm Phần / Tiết học
           </button>
         </div>
       </div>
@@ -332,63 +384,80 @@ export function renderAdminCurriculumView(curriculum) {
       ${subjects
         .map(
           (subj) => `
-        <div class="card p-6 space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-200 pb-3">
-            <div>
-              <span class="badge badge-info">Khối lớp ${subj.grade}</span>
-              <h2 class="text-lg font-bold text-slate-900 mt-1">${subj.name}</h2>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            ${subj.chapters
-              .map(
-                (ch) => `
-              <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+        <div class="space-y-6">
+          ${subj.chapters
+            .map((ch) => {
+              const groups = groupLessonsBySection(ch.lessons);
+              return `
+              <div class="card overflow-hidden border-2 border-slate-300 shadow-sm">
+                <!-- Banner Đỏ: Tên Chương / Chuyên đề -->
+                <div class="bg-red-600 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div class="font-bold text-slate-900">${ch.name} <span class="text-xs font-normal text-slate-400">(Thứ tự: #${ch.order_index})</span></div>
-                    <div class="text-xs text-slate-500">${ch.description || ''}</div>
+                    <div class="font-extrabold text-sm sm:text-base uppercase tracking-wide text-yellow-200">
+                      ${ch.name}
+                    </div>
+                    <div class="text-xs text-red-100 mt-0.5">${ch.description || ''} (${ch.lessons.length} phần)</div>
                   </div>
                   <div class="flex items-center gap-2">
-                    <button onclick="window.SpaceXApp.openAddLessonModal(${ch.id})" class="btn btn-secondary text-xs">
-                      + Thêm Bài học
+                    <button onclick="window.SpaceXApp.openAddLessonModal(${ch.id})" class="px-3 py-1.5 rounded-lg bg-white text-red-700 font-bold text-xs hover:bg-yellow-50">
+                      + Thêm Phần / Tiết
                     </button>
-                    <button onclick="window.SpaceXApp.deleteChapter(${ch.id}, '${ch.name}')" class="btn bg-red-50 text-red-600 text-xs">
+                    <button onclick="window.SpaceXApp.deleteChapter(${ch.id}, '${ch.name.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-lg bg-red-800 hover:bg-red-900 text-white text-xs">
                       Xóa Chương
                     </button>
                   </div>
                 </div>
 
-                <div class="mt-3 space-y-2">
-                  ${
-                    ch.lessons.length === 0
-                      ? `<div class="text-xs text-slate-400 italic">Chưa có bài học nào trong chương này.</div>`
-                      : ch.lessons
+                <!-- Các Nhóm [BÀI 1], [BÀI 2]... màu vàng & Danh sách Tiết học -->
+                <div class="divide-y divide-slate-200">
+                  ${groups
+                    .map(
+                      (grp) => `
+                    <div>
+                      <div class="bg-yellow-300 text-red-700 font-extrabold text-xs sm:text-sm uppercase px-4 py-2 text-center border-b border-slate-300">
+                        ${grp.groupName}
+                      </div>
+                      <div class="divide-y divide-slate-200 bg-white">
+                        ${grp.items
                           .map(
                             (les) => `
-                          <div class="p-3 rounded-lg bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <span class="text-sm font-semibold text-slate-800">${les.name}</span>
-                              <span class="text-xs text-slate-400 ml-2">(${les.totalSets || 0} bộ đề)</span>
-                              <div class="text-xs text-slate-500">${les.description || ''}</div>
+                          <div class="px-4 py-2.5 hover:bg-blue-50/50 transition flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                              <span class="text-xs sm:text-sm font-semibold text-slate-900">${les.name}</span>
+                              ${
+                                (les.totalSets || 0) > 0
+                                  ? `<span class="badge badge-success">✓ Đã có ${les.totalSets} bộ đề</span>`
+                                  : `<span class="text-xs text-slate-400">(Chưa có PDF)</span>`
+                              }
                             </div>
                             <div class="flex items-center gap-2">
-                              <button onclick="window.SpaceXApp.deleteLesson(${les.id}, '${les.name}')" class="text-xs text-red-600 hover:underline font-medium">
-                                Xóa bài
+                              <button
+                                onclick="window.SpaceXApp.jumpToUploadForLesson(${ch.id}, ${les.id})"
+                                class="btn btn-primary text-xs py-1 px-3"
+                              >
+                                📤 Upload PDF vào phần này
+                              </button>
+                              <button
+                                onclick="window.SpaceXApp.deleteLesson(${les.id}, '${les.name.replace(/'/g, "\\'")}')"
+                                class="text-xs text-red-600 hover:underline font-medium px-2"
+                              >
+                                Xóa
                               </button>
                             </div>
                           </div>
                         `
                           )
-                          .join('')
-                  }
+                          .join('')}
+                      </div>
+                    </div>
+                  `
+                    )
+                    .join('')}
                 </div>
               </div>
-            `
-              )
-              .join('')}
-          </div>
+            `;
+            })
+            .join('')}
         </div>
       `
         )
@@ -400,10 +469,13 @@ export function renderAdminCurriculumView(curriculum) {
 /**
  * 14. TRANG UPLOAD PDF & TỰ ĐỘNG TẠO ĐỀ BẰNG GEMINI AI (#/admin/pdf-upload)
  */
-export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []) {
+export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = [], prefill = {}) {
   const rawSubjects = curriculum?.rawSubjects || [];
   const rawChapters = curriculum?.rawChapters || [];
   const rawLessons = curriculum?.rawLessons || [];
+  const selectedChapterId = prefill.chapterId ? Number(prefill.chapterId) : rawChapters[0]?.id || 1;
+  const selectedLessonId = prefill.lessonId ? Number(prefill.lessonId) : null;
+  const prefillTitle = prefill.title || '';
 
   return `
     <div class="space-y-6">
@@ -518,7 +590,7 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="sm:col-span-2">
               <label class="block text-xs font-bold text-slate-700 mb-1">Tên Đề thi / Bộ bài tập (Để trống AI sẽ tự lấy theo tiêu đề PDF)</label>
-              <input id="upload-exam-title" type="text" placeholder="Ví dụ: Đề kiểm tra Chương 1 - Ứng dụng đạo hàm" class="input text-sm" />
+              <input id="upload-exam-title" type="text" value="${prefillTitle.replace(/"/g, '&quot;')}" placeholder="Ví dụ: Đề kiểm tra Chương 1 - Ứng dụng đạo hàm" class="input text-sm" />
             </div>
 
             <div>
@@ -531,23 +603,31 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">Phân loại Hình thức</label>
               <select id="upload-exam-type" class="input text-sm">
+                <option value="PRACTICE" selected>Bộ bài tập luyện tập (BTVN)</option>
                 <option value="EXAM">Đề kiểm tra định kỳ</option>
-                <option value="PRACTICE">Bộ bài tập luyện tập</option>
               </select>
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Chương học</label>
-              <select id="upload-chapter-id" class="input text-sm">
-                ${rawChapters.map((c) => `<option value="${c.id}">${c.name}</option>`).join('')}
+              <label class="block text-xs font-bold text-slate-700 mb-1">Chương / Chuyên đề lớn</label>
+              <select
+                id="upload-chapter-id"
+                onchange="window.SpaceXApp.onUploadChapterChange(this.value)"
+                class="input text-sm"
+              >
+                ${rawChapters
+                  .map(
+                    (c) =>
+                      `<option value="${c.id}" ${Number(selectedChapterId) === Number(c.id) ? 'selected' : ''}>${c.name}</option>`
+                  )
+                  .join('')}
               </select>
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Bài học</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Phần / Tiết học (Tự lọc theo Chương)</label>
               <select id="upload-lesson-id" class="input text-sm">
-                <option value="">-- Chọn bài học --</option>
-                ${rawLessons.map((l) => `<option value="${l.id}">${l.name}</option>`).join('')}
+                ${renderGroupedLessonOptionsHtml(rawLessons, selectedChapterId, selectedLessonId)}
               </select>
             </div>
 
@@ -848,7 +928,11 @@ export function renderAdminExamDetailStudioView(examDetail, attempts = [], curri
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-600 mb-1">Chương học</label>
-            <select id="edit-exam-chapter" class="input text-sm">
+            <select
+              id="edit-exam-chapter"
+              onchange="window.SpaceXApp.onEditExamChapterChange(this.value)"
+              class="input text-sm"
+            >
               ${rawChapters
                 .map(
                   (c) =>
@@ -858,15 +942,9 @@ export function renderAdminExamDetailStudioView(examDetail, attempts = [], curri
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Bài học</label>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Phần / Tiết học</label>
             <select id="edit-exam-lesson" class="input text-sm">
-              <option value="">-- Chọn bài học --</option>
-              ${rawLessons
-                .map(
-                  (l) =>
-                    `<option value="${l.id}" ${examDetail.lesson_id === l.id ? 'selected' : ''}>${l.name}</option>`
-                )
-                .join('')}
+              ${renderGroupedLessonOptionsHtml(rawLessons, examDetail.chapter_id || rawChapters[0]?.id, examDetail.lesson_id)}
             </select>
           </div>
           <div>
