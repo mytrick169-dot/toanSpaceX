@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Space X Math – Nền tảng Học tập & Luyện thi Toán THPT bằng AI</title>
+  <!-- Tải Tailwind CDN & KaTeX khi có Internet, đồng thời tích hợp sẵn bộ CSS độc lập bên dưới để hoạt động 100% cả khi Offline -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --bg-main: #f8fafc;
+      --bg-card: #ffffff;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+    }
+
+    /* Hệ thống Component chuẩn EdTech */
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background-color: #2563eb;
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background-color: #1d4ed8;
+    }
+
+    .btn-secondary {
+      background-color: #f8fafc;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+    .btn-secondary:hover {
+      background-color: #f1f5f9;
+      border-color: #94a3b8;
+    }
+
+    .input {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #0f172a;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-success {
+      background: #dcfce7;
+      color: #15803d;
+    }
+    .badge-danger {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .badge-warning {
+      background: #fef3c7;
+      color: #b45309;
+    }
+    .badge-info {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+    .badge-neutral {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    /* Định dạng Công thức Toán học LaTeX chuyên nghiệp */
+    .math-inline {
+      font-family: "Cambria Math", "Times New Roman", Times, serif;
+      font-style: italic;
+      font-size: 1.06em;
+      padding: 0 2px;
+      color: #0f172a;
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+    }
+    .math-inline sup, .math-inline sub {
+      font-style: normal;
+      font-size: 0.75em;
+      line-height: 1;
+    }
+    .math-fn {
+      font-style: normal;
+      font-weight: 600;
+      margin-right: 2px;
+    }
+    .math-block {
+      margin: 10px 0;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-radius: 10px;
+      text-align: center;
+      font-size: 1.12em;
+      overflow-x: auto;
+    }
+    .math-frac {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      vertical-align: middle;
+      margin: 0 4px;
+      font-style: normal;
+    }
+    .math-num {
+      border-bottom: 1.4px solid #0f172a;
+      padding: 0 4px 1px;
+      line-height: 1.15;
+    }
+    .math-den {
+      padding: 1px 4px 0;
+      line-height: 1.15;
+    }
+    .math-sqrt {
+      display: inline-flex;
+      align-items: center;
+      font-style: normal;
+    }
+    .math-sqrt-body {
+      border-top: 1.3px solid #0f172a;
+      padding-top: 1px;
+      margin-left: 1px;
+    }
+    .math-int {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      vertical-align: middle;
+      margin: 0 3px;
+      font-style: normal;
+      line-height: 1;
+    }
+    .math-int-sym {
+      font-size: 1.35em;
+      font-style: normal;
+    }
+    .math-int-sup, .math-int-sub {
+      font-size: 0.68em;
+    }
+    .math-lim {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      vertical-align: middle;
+      margin: 0 4px;
+      font-style: normal;
+      line-height: 1.05;
+    }
+    .math-lim-op {
+      font-weight: 600;
+      font-size: 0.92em;
+    }
+    .math-lim-sub {
+      font-size: 0.68em;
+    }
+    .math-vec {
+      display: inline-block;
+      position: relative;
+      border-top: 1.4px solid #0f172a;
+      padding: 0 2px;
+      margin: 0 1px;
+      line-height: 1.05;
+    }
+    .math-vec::after {
+      content: "▸";
+      position: absolute;
+      top: -0.66em;
+      right: -0.18em;
+      font-size: 0.62em;
+      font-style: normal;
+      color: #0f172a;
+    }
+    .math-hat {
+      display: inline-block;
+      position: relative;
+      padding: 0 2px;
+    }
+    .math-hat::before {
+      content: "︿";
+      position: absolute;
+      top: -0.65em;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 0.68em;
+      font-style: normal;
+      color: #0f172a;
+    }
+
+    /* GitHub-style Contribution Graph (Đúng 5 mức màu quy định) */
+    .gh-grid {
+      display: inline-flex;
+      gap: 3px;
+      padding: 4px 2px;
+    }
+    .gh-week-col {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .gh-cell {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+    .gh-cell:hover {
+      transform: scale(1.35);
+      outline: 1.5px solid #1e293b;
+    }
+    .gh-empty {
+      background: transparent;
+      cursor: default;
+    }
+    /* 0 lượt: màu xám nhạt */
+    .gh-level-0 {
+      background-color: #ebedf0;
+      border: 1px solid rgba(27, 31, 35, 0.06);
+    }
+    /* 1 lượt: màu xanh nhạt */
+    .gh-level-1 {
+      background-color: #9be9a8;
+    }
+    /* 2–3 lượt: màu xanh trung bình */
+    .gh-level-2 {
+      background-color: #40c463;
+    }
+    /* 4–5 lượt: màu xanh đậm */
+    .gh-level-3 {
+      background-color: #30a14e;
+    }
+    /* Trên 5 lượt: màu xanh đậm nhất */
+    .gh-level-4 {
+      background-color: #216e39;
+    }
+
+    /* Fallback Utility Classes khi chạy trong môi trường không tải CDN */
+    .max-w-7xl { max-width: 1280px; }
+    .max-w-md { max-width: 448px; }
+    .max-w-2xl { max-width: 672px; }
+    .mx-auto { margin-left: auto; margin-right: auto; }
+    .px-4 { padding-left: 16px; padding-right: 16px; }
+    .py-6 { padding-top: 24px; padding-bottom: 24px; }
+    .p-4 { padding: 16px; }
+    .p-5 { padding: 20px; }
+    .p-6 { padding: 24px; }
+    .mb-4 { margin-bottom: 16px; }
+    .mb-6 { margin-bottom: 24px; }
+    .mt-4 { margin-top: 16px; }
+    .mt-6 { margin-top: 24px; }
+    .space-y-4 > * + * { margin-top: 16px; }
+    .space-y-6 > * + * { margin-top: 24px; }
+    .flex { display: flex; }
+    .flex-wrap { flex-wrap: wrap; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .gap-4 { gap: 16px; }
+    .gap-6 { gap: 24px; }
+    .grid { display: grid; }
+    .hidden { display: none !important; }
+    .w-full { width: 100%; }
+  </style>
+</head>
+<body>
+  <!-- Khu vực hiển thị Thông báo (Toasts) -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 max-w-sm"></div>
+
+  <!-- Khu vực hiển thị Hộp thoại (Modals) -->
+  <div id="modal-root"></div>
+
+  <!-- Giao diện chính của Ứng dụng -->
+  <div id="app-root">
+    <div style="padding: 48px; text-align: center; color: #64748b;">
+      Đang khởi tạo nền tảng Space X Math...
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
+
