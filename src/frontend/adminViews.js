@@ -522,9 +522,19 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
         </div>
 
         <!-- Form cập nhật biến môi trường .env ở Backend -->
-        <div id="ai-config-Collapse" class="hidden mt-4 pt-4 border-t border-blue-200 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div id="ai-config-Collapse" class="${aiStatus?.isConfigured ? 'hidden' : ''} mt-4 pt-4 border-t border-blue-200 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Google Gemini API Key (Lưu ở Backend .env)</label>
+            <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+              <label class="block text-xs font-bold text-slate-700">Google Gemini API Key (Lưu ở Backend .env)</label>
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-[11px] font-bold text-blue-600 hover:underline"
+              >
+                🔑 Lấy mã miễn phí tại đây ↗
+              </a>
+            </div>
             <input
               id="cfg-gemini-key"
               type="password"

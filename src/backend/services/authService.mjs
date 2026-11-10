@@ -7,13 +7,14 @@ import { getDb } from '../db/database.mjs';
  * Định dạng: $scrypt$salt_hex$hash_hex
  */
 export function hashPassword(plainPassword) {
+  const cleanPwd = String(plainPassword ?? '');
   const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(String(plainPassword), salt, 64).toString('hex');
+  const derivedKey = crypto.scryptSync(cleanPwd, salt, 64).toString('hex');
   return `$scrypt$${salt}$${derivedKey}`;
 }
 
 /**
- * Kiểm tra mật khẩu chống tấn công timing-attack
+ * Kiểm tra mật khẩu chống tấn công timing-attack (Hỗ trợ cả trường hợp dư khoảng trắng đầu/cuối do bàn phím/autofill)
  */
 export function verifyPassword(plainPassword, storedHash) {
   if (!storedHash || !storedHash.startsWith('$scrypt$')) return false;
@@ -21,10 +22,18 @@ export function verifyPassword(plainPassword, storedHash) {
   if (parts.length !== 4) return false;
   const salt = parts[2];
   const hashHex = parts[3];
-  const derivedKey = crypto.scryptSync(String(plainPassword), salt, 64);
   const storedBuf = Buffer.from(hashHex, 'hex');
-  if (derivedKey.length !== storedBuf.length) return false;
-  return crypto.timingSafeEqual(derivedKey, storedBuf);
+
+  const rawPwd = String(plainPassword ?? '');
+  const candidates = rawPwd.trim() !== rawPwd ? [rawPwd, rawPwd.trim()] : [rawPwd];
+
+  for (const candidate of candidates) {
+    const derivedKey = crypto.scryptSync(candidate, salt, 64);
+    if (derivedKey.length === storedBuf.length && crypto.timingSafeEqual(derivedKey, storedBuf)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -74,41 +83,69 @@ export function verifyJwt(token) {
 }
 
 /**
- * Đăng nhập bằng username & password
+ * Đăng nhập bằng username (hoặc Họ tên / Biệt danh) & password
  */
 export function loginUser(username, password) {
   const db = getDb();
   const cleanUsername = String(username || '').trim();
-  const user = db.prepare(`
+  const cleanLower = cleanUsername.toLowerCase();
+
+  let candidates = db.prepare(`
     SELECT u.*, r.name as role_name
     FROM users u
     JOIN roles r ON u.role_id = r.id
-    WHERE LOWER(u.username) = LOWER(?)
-  `).get(cleanUsername);
+    WHERE LOWER(TRIM(u.username)) = LOWER(?)
+  `).all(cleanUsername);
 
-  if (!user) {
+  if (candidates.length === 0 && cleanLower) {
+    const allUsers = db.prepare(`
+      SELECT u.*, r.name as role_name
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+    `).all();
+    candidates = allUsers.filter((u) =>
+      [u.username, u.full_name, u.nickname].some(
+        (val) => String(val || '').trim().toLowerCase() === cleanLower
+      )
+    );
+  }
+
+  if (candidates.length === 0) {
     throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
   }
 
-  if (user.status === 'LOCKED') {
+  let matchedUser = null;
+  let lockedCandidate = null;
+
+  for (const candidate of candidates) {
+    if (verifyPassword(password, candidate.password_hash)) {
+      if (candidate.status === 'LOCKED') {
+        lockedCandidate = candidate;
+      } else {
+        matchedUser = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!matchedUser && lockedCandidate) {
     throw new Error('Tài khoản của bạn đã bị khóa bởi Giáo viên quản trị. Vui lòng liên hệ Giáo viên.');
   }
 
-  const valid = verifyPassword(password, user.password_hash);
-  if (!valid) {
+  if (!matchedUser) {
     throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
   }
 
   const token = signJwt({
-    userId: user.id,
-    username: user.username,
-    role: user.role_name,
-    fullName: user.full_name,
+    userId: matchedUser.id,
+    username: matchedUser.username,
+    role: matchedUser.role_name,
+    fullName: matchedUser.full_name,
   });
 
   return {
     token,
-    user: sanitizeUser(user),
+    user: sanitizeUser(matchedUser),
   };
 }
 
@@ -119,6 +156,7 @@ export function registerStudent({ fullName, username, password, className, nickn
   const db = getDb();
   const cleanUsername = String(username || '').trim();
   const cleanName = String(fullName || '').trim();
+  const cleanPassword = String(password ?? '');
 
   if (!cleanUsername || cleanUsername.length < 3) {
     throw new Error('Username phải có ít nhất 3 ký tự.');
@@ -129,17 +167,18 @@ export function registerStudent({ fullName, username, password, className, nickn
   if (!cleanName) {
     throw new Error('Vui lòng nhập họ và tên học sinh.');
   }
-  if (!password || String(password).length < 6) {
+  if (!cleanPassword || cleanPassword.trim().length < 6) {
     throw new Error('Mật khẩu phải có ít nhất 6 ký tự.');
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(cleanUsername);
+  const existing = db.prepare('SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(?)').get(cleanUsername);
   if (existing) {
     throw new Error('Username này đã được sử dụng. Vui lòng chọn username khác.');
   }
 
-  const passwordHash = hashPassword(password);
+  const passwordHash = hashPassword(cleanPassword.trim());
   const studentRole = db.prepare("SELECT id FROM roles WHERE name = 'STUDENT'").get();
+  const roleId = studentRole ? studentRole.id : 2;
 
   const info = db.prepare(`
     INSERT INTO users (username, password_hash, full_name, nickname, class_name, role_id, status)
@@ -150,7 +189,7 @@ export function registerStudent({ fullName, username, password, className, nickn
     cleanName,
     nickname ? String(nickname).trim() : cleanName,
     className ? String(className).trim() : '12A1',
-    studentRole.id
+    roleId
   );
 
   const newUser = db.prepare(`

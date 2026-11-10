@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { ENV } from '../config/env.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 let dbInstance = null;
 
@@ -11,13 +16,25 @@ let dbInstance = null;
 export function getDb() {
   if (dbInstance) return dbInstance;
 
-  const dbDir = path.dirname(ENV.DATABASE_PATH);
+  const resolvedDbPath = path.isAbsolute(ENV.DATABASE_PATH)
+    ? ENV.DATABASE_PATH
+    : path.resolve(PROJECT_ROOT, ENV.DATABASE_PATH);
+
+  const dbDir = path.dirname(resolvedDbPath);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  dbInstance = new DatabaseSync(ENV.DATABASE_PATH);
-  dbInstance.exec('PRAGMA journal_mode = WAL;');
+  dbInstance = new DatabaseSync(resolvedDbPath);
+  dbInstance.exec('PRAGMA busy_timeout = 5000;');
+  try {
+    dbInstance.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    dbInstance.exec('PRAGMA journal_mode = DELETE;');
+  } catch {
+    // Fallback if another process still holds a shared WAL lock
+  }
+  dbInstance.exec('PRAGMA synchronous = FULL;');
+
   dbInstance.exec('PRAGMA foreign_keys = ON;');
 
   initSchema(dbInstance);

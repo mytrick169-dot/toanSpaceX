@@ -412,9 +412,10 @@ export function ensureSeedData() {
     `).run(adminHash);
   }
 
-  // 2. Đảm bảo cây chương trình Toán 12 chuẩn 12 Chương / Chuyên đề đã được nạp
+  // 2. Đảm bảo cây chương trình Toán 12 chuẩn 12 Chương / Chuyên đề & 186 Phần học đã được nạp
   const chCount = db.prepare('SELECT COUNT(*) as c FROM chapters').get().c;
-  if (chCount < 12) {
+  const lessonCount = db.prepare('SELECT COUNT(*) as c FROM lessons').get().c;
+  if (chCount < 12 || lessonCount < 180) {
     rebuildToan12Curriculum();
   }
 }

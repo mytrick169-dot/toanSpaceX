@@ -114,6 +114,20 @@ async function runVerificationSuite() {
   const studentToken = studentReg.body.token;
   const tempStudentId = studentReg.body.user.id;
 
+  // Kiểm tra Học sinh đăng xuất ra và đăng nhập lại ngay lập tức bằng Username và bằng Họ tên
+  const studentReLogin = await invokeApi('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'test_e2e_student', password: 'password123' }),
+  });
+  assert.equal(studentReLogin.status, 200, 'Học sinh vừa đăng ký phải đăng nhập lại được ngay bằng username');
+  assert.equal(studentReLogin.body.user.id, tempStudentId);
+
+  const studentReLoginByName = await invokeApi('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'Học sinh Kiểm thử Tự động', password: 'password123 ' }),
+  });
+  assert.equal(studentReLoginByName.status, 200, 'Học sinh phải đăng nhập lại được cả khi nhập Họ tên hoặc dư dấu cách mật khẩu');
+
   // Kiểm tra mật khẩu trong DB được băm bằng $scrypt$, không lưu plain text
   const adminDbRow = db.prepare("SELECT password_hash FROM users WHERE username = 'admin'").get();
   assert.ok(adminDbRow.password_hash.startsWith('$scrypt$'), 'Mật khẩu phải được băm bảo mật');

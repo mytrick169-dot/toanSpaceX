@@ -72,6 +72,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename
     console.log(`🤖 Gemini AI Model cấu hình (.env):       ${ENV.GEMINI_MODEL}`);
     console.log(`👨‍🏫 Tài khoản Quản trị (Giáo viên):        admin / admin123`);
     console.log(`====================================================================`);
+
+    // Tự động giữ kết nối (Keep-Alive) mỗi 10 phút trên Render Cloud để tránh container ngủ đông
+    const externalUrl = process.env.RENDER_EXTERNAL_URL || '';
+    if (externalUrl) {
+      setInterval(() => {
+        fetch(`${externalUrl}/api/curriculum`).catch(() => {});
+      }, 10 * 60 * 1000);
+    }
   });
 }
 

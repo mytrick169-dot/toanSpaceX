@@ -137,6 +137,7 @@ function navigate(hash) {
 function renderAuthPage(mode = 'login') {
   const appRoot = document.getElementById('app-root');
   const isLogin = mode === 'login';
+  const lastUsername = localStorage.getItem('spacex_last_username') || '';
 
   appRoot.innerHTML = `
     <div class="min-h-screen bg-slate-50 flex flex-col justify-center py-10 px-4">
@@ -177,12 +178,38 @@ function renderAuthPage(mode = 'login') {
               ? `
             <form onsubmit="window.SpaceXApp.submitLogin(event)" class="space-y-4">
               <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Tên đăng nhập (Username)</label>
-                <input id="auth-username" type="text" required placeholder="Nhập username của bạn" class="input" />
+                <label class="block text-xs font-bold text-slate-700 mb-1">Tên đăng nhập (Username hoặc Họ tên)</label>
+                <input
+                  id="auth-username"
+                  name="username"
+                  type="text"
+                  autocomplete="username"
+                  value="${lastUsername.replace(/"/g, '&quot;')}"
+                  required
+                  placeholder="Nhập username của bạn (VD: an12a1)"
+                  class="input"
+                />
               </div>
               <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Mật khẩu</label>
-                <input id="auth-password" type="password" required placeholder="Nhập mật khẩu" class="input" />
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-xs font-bold text-slate-700">Mật khẩu</label>
+                  <button
+                    type="button"
+                    onclick="window.SpaceXApp.togglePasswordField('auth-password', this)"
+                    class="text-[11px] font-semibold text-blue-600 hover:underline"
+                  >
+                    👁️ Hiện mật khẩu
+                  </button>
+                </div>
+                <input
+                  id="auth-password"
+                  name="password"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                  placeholder="Nhập mật khẩu"
+                  class="input"
+                />
               </div>
               <button type="submit" class="btn btn-primary w-full py-2.5 text-sm font-bold">
                 Đăng nhập vào Hệ thống →
@@ -207,28 +234,75 @@ function renderAuthPage(mode = 'login') {
             <form onsubmit="window.SpaceXApp.submitRegister(event)" class="space-y-4">
               <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Họ và tên học sinh</label>
-                <input id="reg-fullname" type="text" required placeholder="Ví dụ: Nguyễn Văn An" class="input" />
+                <input
+                  id="reg-fullname"
+                  type="text"
+                  autocomplete="off"
+                  required
+                  placeholder="Ví dụ: Nguyễn Văn An"
+                  class="input"
+                />
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-xs font-bold text-slate-700 mb-1">Username</label>
-                  <input id="reg-username" type="text" required placeholder="Ví dụ: an12a1" class="input" />
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Lớp</label>
+                  <input
+                    id="reg-classname"
+                    type="text"
+                    autocomplete="off"
+                    value="12A1"
+                    required
+                    placeholder="12A1"
+                    class="input"
+                  />
                 </div>
                 <div>
-                  <label class="block text-xs font-bold text-slate-700 mb-1">Lớp</label>
-                  <input id="reg-classname" type="text" value="12A1" required placeholder="12A1" class="input" />
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Biệt danh (Tùy chọn)</label>
+                  <input
+                    id="reg-nickname"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="VD: An MathPro"
+                    class="input"
+                  />
                 </div>
               </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Biệt danh hiển thị trên Bảng xếp hạng (Tùy chọn)</label>
-                <input id="reg-nickname" type="text" placeholder="Ví dụ: An MathPro" class="input" />
+              <div class="pt-2 border-t border-slate-100">
+                <label class="block text-xs font-bold text-blue-700 mb-1">Tên đăng nhập (Username dùng để đăng nhập)</label>
+                <input
+                  id="reg-username"
+                  name="username"
+                  type="text"
+                  autocomplete="username"
+                  required
+                  placeholder="Ví dụ: an12a1 (chữ không dấu & số)"
+                  class="input border-blue-300"
+                />
               </div>
               <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Mật khẩu (Tối thiểu 6 ký tự)</label>
-                <input id="reg-password" type="password" required minlength="6" placeholder="Nhập mật khẩu" class="input" />
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-xs font-bold text-blue-700">Mật khẩu (Tối thiểu 6 ký tự)</label>
+                  <button
+                    type="button"
+                    onclick="window.SpaceXApp.togglePasswordField('reg-password', this)"
+                    class="text-[11px] font-semibold text-blue-600 hover:underline"
+                  >
+                    👁️ Hiện mật khẩu
+                  </button>
+                </div>
+                <input
+                  id="reg-password"
+                  name="password"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                  minlength="6"
+                  placeholder="Nhập mật khẩu (ít nhất 6 ký tự)"
+                  class="input border-blue-300"
+                />
               </div>
               <p class="text-xs text-slate-500">
-                ✓ Không yêu cầu Email hay OTP. Bạn có thể đăng nhập học tập ngay lập tức sau khi tạo tài khoản.
+                ✓ Không yêu cầu Email hay OTP. Bạn có thể đăng nhập bằng <strong>Username</strong> (hoặc <strong>Họ tên</strong>) ngay sau khi tạo tài khoản.
               </p>
               <button type="submit" class="btn btn-primary w-full py-2.5 text-sm font-bold">
                 Tạo tài khoản Học sinh →
@@ -660,6 +734,18 @@ window.SpaceXApp = {
     if (banner) banner.textContent = text;
   },
 
+  togglePasswordField(inputId, btnEl) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      if (btnEl) btnEl.textContent = '🙈 Ẩn mật khẩu';
+    } else {
+      input.type = 'password';
+      if (btnEl) btnEl.textContent = '👁️ Hiện mật khẩu';
+    }
+  },
+
   async submitLogin(e) {
     e.preventDefault();
     const u = document.getElementById('auth-username').value;
@@ -673,6 +759,7 @@ window.SpaceXApp = {
       AppState.user = data.user;
       localStorage.setItem('spacex_math_token', data.token);
       localStorage.setItem('spacex_math_user', JSON.stringify(data.user));
+      localStorage.setItem('spacex_last_username', data.user.username);
       showToast(`Chào mừng ${data.user.fullName} quay trở lại!`);
       navigate(data.user.role === 'ADMIN' ? '#/admin/dashboard' : '#/student/dashboard');
     } catch (err) {
@@ -706,7 +793,8 @@ window.SpaceXApp = {
       AppState.user = data.user;
       localStorage.setItem('spacex_math_token', data.token);
       localStorage.setItem('spacex_math_user', JSON.stringify(data.user));
-      showToast(`Đăng ký thành công! Xin chào ${data.user.fullName}.`);
+      localStorage.setItem('spacex_last_username', data.user.username);
+      showToast(`Đăng ký thành công! Tài khoản @${data.user.username} (${data.user.fullName}) đã được lưu.`);
       navigate('#/student/dashboard');
     } catch (err) {
       showToast(err.message, 'error');
