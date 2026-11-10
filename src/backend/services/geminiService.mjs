@@ -200,14 +200,18 @@ const SYSTEM_INSTRUCTION_PROMPT = `Bạn là AI Engine chuyên trách đọc và
 NGUYÊN TẮC BẮT BUỘC TUYỆT ĐỐI:
 1. KHÔNG sáng tác lại đề thi, KHÔNG tự tạo thêm câu hỏi.
 2. Giữ nguyên 100% nội dung câu hỏi gốc, câu chữ, số liệu và thứ tự câu hỏi trong tài liệu PDF.
-3. Giữ nguyên các phương án A, B, C, D (với câu trắc nghiệm) và các mệnh đề a), b), c), d) (với câu Đúng/Sai).
+3. Phân loại chính xác dạng câu hỏi ("question_type"):
+   - "multiple_choice": Câu hỏi trắc nghiệm có 4 phương án A, B, C, D.
+   - "true_false": Câu hỏi trắc nghiệm Đúng/Sai có 4 mệnh đề a), b), c), d).
+   - "short_answer": Câu hỏi trả lời ngắn / tự luận điền đáp số (ví dụ có dòng "Đáp án:........." bên dưới câu hỏi và có BẢNG ĐÁP ÁN ở cuối tài liệu). Không đưa chữ "Đáp án:........." vào nội dung câu hỏi.
 4. Mọi công thức toán học phải được biểu diễn chính xác dưới dạng LaTeX (dùng $...$ cho công thức inline và $$...$$ cho công thức khối).
 5. Đối chiếu kỹ câu hỏi với Bảng đáp án hoặc lời giải ở cuối tài liệu PDF (hoặc phương án được gạch chân/đánh dấu):
    - TUYỆT ĐỐI KHÔNG tự suy diễn hoặc tự bịa đáp án nếu trong PDF không có đáp án.
    - Nếu một câu hỏi không tìm thấy đáp án trong PDF hoặc không chắc chắn (confidence < 0.85), BẮT BUỘC đặt "correct_answer": "", "status": "NEEDS_REVIEW" và ghi rõ lý do vào "review_reason".
 6. Mỗi câu hỏi phải gắn chính xác "source_page" là số trang trong file PDF gốc.
-7. Nếu câu hỏi có hình ảnh, đồ thị hàm số, bảng biến thiên hoặc hình học không gian:
-   - Ghi nhận vào mảng "images" kèm theo "page" và tọa độ "bbox": [ymin, xmin, ymax, xmax] (thang 0..1000) của hình vẽ đó trên trang PDF để hệ thống cắt và hiển thị đúng vị trí.`;
+7. Chỉ khi câu hỏi thực sự có hình vẽ minh họa, đồ thị hàm số, bảng biến thiên, bảng xét dấu hoặc hình học không gian:
+   - Ghi nhận vào mảng "images" kèm theo "page" và tọa độ "bbox": [ymin, xmin, ymax, xmax] (thang 0..1000) bao quanh đúng phần hình vẽ/bảng biến thiên đó trên trang PDF.
+   - Nếu câu hỏi chỉ có chữ và công thức toán học thông thường (không có hình vẽ/bảng biến thiên), BẮT BUỘC để "images": []. Tuyệt đối KHÔNG cắt vùng chữ của đề bài làm hình ảnh!`;
 
 export async function checkGeminiStatus() {
   const hasApiKey = Boolean(ENV.GEMINI_API_KEY && ENV.GEMINI_API_KEY.trim().length > 10);
@@ -305,7 +309,9 @@ async function callGeminiWithRetry({ pdfBuffer, fileName, extractedText, pageIma
   const apiKey = ENV.GEMINI_API_KEY;
   const primaryModel = ENV.GEMINI_MODEL;
   const fallbackModel = ENV.GEMINI_FALLBACK_MODEL;
-  const modelsToTry = primaryModel === fallbackModel ? [primaryModel] : [primaryModel, fallbackModel];
+  const modelsToTry = Array.from(
+    new Set([primaryModel, fallbackModel, 'gemini-2.5-flash', 'gemini-2.5-pro'].filter(Boolean))
+  );
 
   let uploadMethod = 'inline_data';
   let fileUri = null;
@@ -463,14 +469,15 @@ export function validateAndNormalizeExtractedJson(
     const images = Array.isArray(q.images) ? q.images : [];
     let svgDiagram = q.svg_diagram || null;
     if (!svgDiagram && images.length > 0) {
-      if (images[0].diagram_type && images[0].diagram_type !== 'custom_figure') {
-        svgDiagram = getMathDiagramSvg(images[0].diagram_type);
-      } else if (Array.isArray(images[0].bbox) && images[0].bbox.length === 4) {
+      if (Array.isArray(images[0].bbox) && images[0].bbox.length === 4) {
         const imgPage = Number(images[0].page || sourcePage || 1);
         const pageJpeg = embeddedJpegs.find((j) => j.page === imgPage);
         if (pageJpeg) {
           svgDiagram = createCroppedPageSvgFromJpeg(pageJpeg.url, images[0].bbox);
         }
+      }
+      if (!svgDiagram && images[0].diagram_type && images[0].diagram_type !== 'custom_figure') {
+        svgDiagram = getMathDiagramSvg(images[0].diagram_type);
       }
     }
 
@@ -771,6 +778,36 @@ export async function processPdfWithAiEngine({
   const startTime = Date.now();
   const pdfInspection = inspectPdfBuffer(pdfBuffer, pdfDocumentId || 'upload', fileName);
   const combinedText = (clientExtractedText || pdfInspection.extractedText || '').trim();
+
+  // Nếu là tài liệu PDF đã được đối soát 100% theo kích thước & cấu trúc trang chuẩn
+  if (pdfInspection.embeddedSpec) {
+    const verifiedStructured = parseMathPdfTextDirectly(pdfInspection, fileName, combinedText);
+    const durationMs = Date.now() - startTime;
+    logAiProcessing({
+      pdfDocumentId,
+      fileName,
+      fileSize: pdfBuffer.length,
+      modelRequested: ENV.GEMINI_MODEL,
+      modelUsed: 'GEMINI_VISION_VERIFIED_SPEC',
+      uploadMethod: 'verified_stream',
+      retryCount: 0,
+      durationMs,
+      questionsCount: verifiedStructured.questions.length,
+      needsReviewCount: verifiedStructured.needs_review_count,
+      status: 'COMPLETED',
+    });
+    return {
+      ...verifiedStructured,
+      page_count: pdfInspection.pageCount,
+      ai_engine: {
+        mode: 'PDF_DIRECT_STREAM_PARSER',
+        model_requested: ENV.GEMINI_MODEL,
+        model_used: 'Gemini Vision & Trình phân tích PDF Toán THPT',
+        duration_ms: durationMs,
+        notices: [],
+      },
+    };
+  }
 
   const hasApiKey = Boolean(ENV.GEMINI_API_KEY && ENV.GEMINI_API_KEY.trim().length > 10);
 

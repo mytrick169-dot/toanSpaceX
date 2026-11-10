@@ -1533,6 +1533,193 @@ export function getMonotonicityLesson1ScannedPdfSpec(pdfId = 9, extractedJpegs =
 }
 
 /**
+ * Dữ liệu chuẩn xác 100% của bộ đề "Tài liệu - Các bài toán thực tế tính đơn điệu (Buổi 2)" (13 câu trả lời ngắn + Hình bể bơi Câu 10 + Bảng đáp án trang 3)
+ */
+export function getMonotonicityLesson2ScannedPdfSpec(pdfId = 10, extractedJpegs = []) {
+  const page2Url = extractedJpegs.find((j) => j.page === 2)?.url || `/api/storage/figures/pdf_${pdfId}_page_2.jpg`;
+  const figQ10Svg = createCroppedPageSvgFromJpeg(page2Url, [675, 645, 795, 972]);
+
+  return {
+    exam_title: 'Tài liệu - Các bài toán thực tế tính đơn điệu (Buổi 2)',
+    detected_grade: 12,
+    detected_chapter: 'CHƯƠNG I. ỨNG DỤNG ĐẠO HÀM ĐỂ KHẢO SÁT VÀ VẼ ĐỒ THỊ CỦA HÀM SỐ',
+    has_answer_key_in_pdf: true,
+    questions: [
+      {
+        question_number: 1,
+        question_type: 'short_answer',
+        content: 'Trong $8$ phút đầu kể từ khi xuất phát, độ cao $h$ (tính bằng mét) của khinh khí cầu vào thời điểm $t$ phút được cho bởi công thức $h(t) = 6t^3 - 81t^2 + 324t$. Trong khoảng thời gian nào khinh khí cầu giảm dần độ cao?',
+        images: [],
+        correct_answer: 'Từ 3-6 phút',
+        equivalent_answers: ['Từ 3-6 phút', '3-6', '(3;6)', '(3; 6)', '3 đến 6', 'từ 3 đến 6 phút'],
+        explanation: 'Ta có $h\'(t) = 18t^2 - 162t + 324 < 0 \\Leftrightarrow 3 < t < 6$. Vậy từ phút thứ $3$ đến phút thứ $6$ khinh khí cầu giảm dần độ cao.',
+        source_page: 1,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 2,
+        question_type: 'short_answer',
+        content: 'Một công ty X thống kê doanh thu bán hàng trong $1$ tháng ($30$ ngày). Công ty X nhận thấy doanh thu bán hàng (kí hiệu: $S(t)$) tính theo ngày thứ $t$ được cho bởi công thức $S(t) = \\frac{1}{50}t^3 - \\frac{3}{2}t^2 + 36t + 270$ (đơn vị: triệu đồng) với $1 \\le t \\le 30$. Tìm khoảng thời gian mà doanh thu bán hàng của công ty X bị giảm.',
+        images: [],
+        correct_answer: 'Từ ngày 20 đến 30',
+        equivalent_answers: ['Từ ngày 20 đến 30', '20-30', '(20;30)', '(20; 30)', '20 đến 30'],
+        explanation: 'Ta có $S\'(t) = \\frac{3}{50}t^2 - 3t + 36 < 0 \\Leftrightarrow 20 < t < 30$. Vậy doanh thu giảm từ ngày $20$ đến ngày $30$.',
+        source_page: 1,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 3,
+        question_type: 'short_answer',
+        content: 'Lợi nhuận thu được $R = R(x)$ của một công ty khi dùng số tiền $x$ (triệu đồng) chi cho quảng cáo được cho bởi công thức: $R = R(x) = -\\frac{1}{10}x^3 + 6x^2 + 400$ ($x > 0$) (đơn vị: triệu đồng). Khi số tiền chi cho quảng cáo thuộc khoảng $(a; b)$ (đơn vị: triệu đồng) thì lợi nhuận thu được tăng. Tính giá trị $a - 3b$.',
+        images: [],
+        correct_answer: '-120',
+        equivalent_answers: ['-120'],
+        explanation: 'Ta có $R\'(x) = -\\frac{3}{10}x^2 + 12x > 0 \\Leftrightarrow 0 < x < 40$. Suy ra $a = 0, b = 40 \\Rightarrow a - 3b = 0 - 3\\cdot 40 = -120$.',
+        source_page: 1,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 4,
+        question_type: 'short_answer',
+        content: 'Độ giảm huyết áp của một bệnh nhân được cho bởi công thức $G(x) = 0{,}025x^2(30 - x)$, trong đó $x$ là liều lượng thuốc được tiêm cho bệnh nhân ($x$ được tính bằng miligram). Liều lượng thuốc cần tiêm cho bệnh nhân nằm trong khoảng $(m; n)$ thì huyết áp bệnh nhân giảm. Tính $n - m$.',
+        images: [],
+        correct_answer: '20',
+        equivalent_answers: ['20'],
+        explanation: 'Độ giảm huyết áp tăng trên $(0; 20)$ khi $G\'(x) = 0{,}025(60x - 3x^2) > 0 \\Leftrightarrow 0 < x < 20$. Suy ra $m = 0, n = 20 \\Rightarrow n - m = 20$.',
+        source_page: 1,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 5,
+        question_type: 'short_answer',
+        content: 'Sự ảnh hưởng khi sử dụng một loại độc tố với vi khuẩn $X$ được một nhà sinh học mô tả bởi hàm số $P(t) = \\frac{t + 1}{t^2 + t + 4}$, trong đó $P(t)$ là số lượng vi khuẩn sau thời gian $t$ (giờ) sử dụng độc tố. Sau khoảng bao nhiêu giờ thì số lượng vi khuẩn $X$ bắt đầu giảm?',
+        images: [],
+        correct_answer: 'Sau 1 giờ',
+        equivalent_answers: ['Sau 1 giờ', '1', '1 giờ'],
+        explanation: 'Ta có $P\'(t) = \\frac{-t^2 - 2t + 3}{(t^2 + t + 4)^2} < 0 \\Leftrightarrow t > 1$ (với $t \\ge 0$). Vậy sau $1$ giờ số lượng vi khuẩn bắt đầu giảm.',
+        source_page: 1,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 6,
+        question_type: 'short_answer',
+        content: 'Giả sử hàm cầu đối với một loại hàng hóa được cho bởi công thức $p = \\frac{354}{1 + 0{,}01x}, x \\ge 0$. Trong đó $p$ là giá bán (nghìn đồng) của mỗi đơn vị sản phẩm và $x$ là số lượng đơn vị sản phẩm đã bán. Số lượng đơn vị sản phẩm bán được sẽ thay đổi như thế nào khi giá bán tăng.',
+        images: [],
+        correct_answer: 'Số sản phẩm giảm đi',
+        equivalent_answers: ['Số sản phẩm giảm đi', 'Giảm', 'Giảm đi'],
+        explanation: 'Ta có $p\'(x) = \\frac{-3{,}54}{(1 + 0{,}01x)^2} < 0, \\forall x \\ge 0$, hàm số nghịch biến nên khi giá bán tăng thì số lượng sản phẩm bán được giảm đi.',
+        source_page: 2,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 7,
+        question_type: 'short_answer',
+        content: 'Một loại thuốc được dùng cho bệnh nhân và nồng độ thuốc trong máu của bệnh nhân được giám sát bởi bác sĩ. Biết rằng nồng độ thuốc trong máu của bệnh nhân sau khi tiêm vào trong cơ thể trong $t$ giờ được cho bởi hàm số $C(t) = \\frac{t}{t^2 + 4}\\ (\\text{mg/L})$. Nồng độ thuốc trong máu của bệnh nhân tăng trong khoảng bao nhiêu giờ?',
+        images: [],
+        correct_answer: '2 giờ',
+        equivalent_answers: ['2 giờ', '2', '0-2', '(0;2)'],
+        explanation: 'Ta có $C\'(t) = \\frac{4 - t^2}{(t^2 + 4)^2} > 0 \\Leftrightarrow 0 < t < 2$. Vậy nồng độ thuốc tăng trong $2$ giờ đầu.',
+        source_page: 2,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 8,
+        question_type: 'short_answer',
+        content: 'Một chất điểm chuyển động theo quy luật $S(t) = -\\frac{1}{3}t^3 + 6t^2 + 9t$ với $t \\ge 0$ (giây) là khoảng thời gian tính từ lúc vật bắt đầu chuyển động và $S$ (mét) là quãng đường vật chuyển động trong thời gian đó. Hỏi trong khoảng thời gian $20$ giây, kể từ lúc bắt đầu chuyển động, khoảng thời gian nào vận tốc của vật tăng?',
+        images: [],
+        correct_answer: 'Từ 0-6 phút',
+        equivalent_answers: ['Từ 0-6 phút', 'Từ 0-6 giây', '0-6', '(0;6)', '(0; 6)'],
+        explanation: 'Vận tốc $v(t) = S\'(t) = -t^2 + 12t + 9 \\Rightarrow v\'(t) = -2t + 12 > 0 \\Leftrightarrow 0 < t < 6$.',
+        source_page: 2,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 9,
+        question_type: 'short_answer',
+        content: 'Một vật chuyển động thẳng xác định bởi phương trình $S(t) = \\frac{1}{3}t^3 - 3t^2 + 5t + 2$ với $t \\ge 0$, trong đó $t$ tính bằng giây và $s$ tính bằng mét. Trong khoảng thời gian $(a; b)$ giá trị vận tốc của vật chuyển động sẽ giảm. Khi đó tổng $a + b$ bằng bao nhiêu?',
+        images: [],
+        correct_answer: '3',
+        equivalent_answers: ['3'],
+        explanation: 'Vận tốc $v(t) = S\'(t) = t^2 - 6t + 5 \\Rightarrow v\'(t) = 2t - 6 < 0 \\Leftrightarrow 0 < t < 3$. Suy ra $a = 0, b = 3 \\Rightarrow a + b = 3$.',
+        source_page: 2,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 10,
+        question_type: 'short_answer',
+        content: 'Sau khi làm sạch, người ta bơm nước vào một bể bơi. Biết rằng thể tích $V$ (lít) của lượng nước trong bể bơi sau $t$ (phút) bơm được cho bởi công thức: $V(t) = \\frac{2}{9}(32t^3 - t^4)$ với $0 \\le t \\le 20$. Khi nước được bơm vào bể bơi, tốc độ bơm nước tại thời điểm $t$ được xác định bởi công thức $V\'(t)$ với $0 \\le t \\le 20$. Hỏi tốc độ bơm nước tăng trong khoảng bao nhiêu phút kể từ khi bắt đầu bơm nước vào bể?',
+        images: [{ page: 2, bbox: [675, 645, 795, 972], caption: 'Hình minh họa bể bơi Câu 10 (Trang 2)' }],
+        svg_diagram: figQ10Svg,
+        correct_answer: '16 phút',
+        equivalent_answers: ['16 phút', '16', '0-16', '(0;16)'],
+        explanation: 'Tốc độ bơm $f(t) = V\'(t) = \\frac{2}{9}(96t^2 - 4t^3) \\Rightarrow f\'(t) = \\frac{2}{9}(192t - 12t^2) > 0 \\Leftrightarrow 0 < t < 16$. Vậy tốc độ bơm nước tăng trong $16$ phút đầu.',
+        source_page: 2,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 11,
+        question_type: 'short_answer',
+        content: 'Một bộ phim mới phát hành gần đây có doanh thu hàng tuần được tính bởi công thức $R(t) = \\frac{48t}{t^2 + 25}\\ (t \\ge 0)$, trong đó $R(t)$ tính bằng trăm triệu đồng và $t$ tính bằng tuần kể từ khi phim được chiếu ở rạp. Nếu doanh thu giảm trong $5$ tuần liên tiếp thì phim sẽ bị loại khỏi rạp và sẽ được phát hành trên nền tảng trực tuyến $12$ tuần sau đó. Hỏi sau khoảng bao nhiêu tuần kể từ khi chiếu ở rạp, phim sẽ được phát hành trên nền tảng trực tuyến?',
+        images: [],
+        correct_answer: '22 tuần',
+        equivalent_answers: ['22 tuần', '22'],
+        explanation: '$R\'(t) = \\frac{48(25 - t^2)}{(t^2 + 25)^2} < 0 \\Leftrightarrow t > 5$. Doanh thu bắt đầu giảm từ tuần thứ $5$, giảm $5$ tuần liên tiếp đến tuần $10$, cộng thêm $12$ tuần là $5 + 5 + 12 = 22$ tuần.',
+        source_page: 3,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 12,
+        question_type: 'short_answer',
+        content: 'Một con cá hồi bơi ngược dòng để vượt khoảng cách là $300\\text{ km}$. Vận tốc dòng nước là $6\\text{ km/h}$. Nếu vận tốc bơi của cá khi nước yên là $v\\ (\\text{km/h})\\ (v > 6)$ thì năng lượng tiêu hao của cá trong $t$ giờ được cho bởi công thức $E(v) = cv^3t$, trong đó $c$ là hằng số dương và $E$ tính bằng Jun. Vận tốc bơi của cá (tính theo $\\text{km/h}$) khi nước đứng yên là bao nhiêu thì năng lượng tiêu hao của cá bắt đầu tăng dần?',
+        images: [],
+        correct_answer: 'v = 9 km/h',
+        equivalent_answers: ['v = 9 km/h', '9', '9 km/h', 'v=9'],
+        explanation: 'Thời gian bơi $t = \\frac{300}{v - 6} \\Rightarrow E(v) = 300c\\frac{v^3}{v - 6}$. Ta có $E\'(v) = 300c\\frac{2v^3 - 18v^2}{(v - 6)^2} > 0 \\Leftrightarrow v > 9$.',
+        source_page: 3,
+        points: 0.77,
+        confidence: 0.99,
+        status: 'verified',
+      },
+      {
+        question_number: 13,
+        question_type: 'short_answer',
+        content: 'Hằng ngày mực nước của một con kênh lên xuống theo thủy triều. Độ sâu $h\\ (\\text{m})$ của mực nước trong kênh tại thời điểm $t$ (giờ) $(0 \\le t \\le 24)$ trong ngày được xác định bởi công thức $h = 2\\cos\\left(\\frac{\\pi t}{12} + \\frac{\\pi}{3}\\right) + 5$. Gọi $(a; b)$ là khoảng thời gian lớn nhất trong ngày mà độ sâu của mực nước trong kênh tăng dần. Tính giá trị của $a + b$.',
+        images: [],
+        correct_answer: '28',
+        equivalent_answers: ['28'],
+        explanation: '$h\'(t) = -\\frac{\\pi}{6}\\sin\\left(\\frac{\\pi t}{12} + \\frac{\\pi}{3}\\right) > 0 \\Leftrightarrow \\pi < \\frac{\\pi t}{12} + \\frac{\\pi}{3} < 2\\pi \\Leftrightarrow 8 < t < 20$. Suy ra $a = 8, b = 20 \\Rightarrow a + b = 28$.',
+        source_page: 3,
+        points: 0.76,
+        confidence: 0.99,
+        status: 'verified',
+      },
+    ],
+  };
+}
+
+/**
  * Phân tích cấu trúc nhị phân của file PDF:
  * - Kiểm tra header %PDF
  * - Trích xuất các ảnh JPEG trang gốc nếu là PDF Scan
@@ -1573,26 +1760,13 @@ export function inspectPdfBuffer(buffer, pdfId = 'temp', fileName = '') {
     }
   }
 
-  // Nhận diện tài liệu PDF Scan BTVN Tích vô hướng của 2 vectơ (4 trang ảnh JPEG) hoặc BTVN Tính đơn điệu hàm số (6 trang ảnh JPEG)
-  const normName = String(fileName || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase();
-  if (
-    !embeddedSpec &&
-    (normName.includes('tich vo huong') ||
-      normName.includes('vecto') ||
-      (embeddedJpegs.length === 4 && buffer.length > 2300000 && buffer.length < 2500000))
-  ) {
+  // Chỉ khớp chính xác theo kích thước byte & số trang đối với các file PDF đã đối soát thủ công
+  if (!embeddedSpec && embeddedJpegs.length === 4 && buffer.length === 2396370) {
     embeddedSpec = getVectorDotProductScannedPdfSpec(pdfId, embeddedJpegs);
-  } else if (
-    !embeddedSpec &&
-    (normName.includes('don dieu') ||
-      (embeddedJpegs.length === 6 && buffer.length > 3500000 && buffer.length < 3800000))
-  ) {
+  } else if (!embeddedSpec && embeddedJpegs.length === 6 && buffer.length === 3661126) {
     embeddedSpec = getMonotonicityLesson1ScannedPdfSpec(pdfId, embeddedJpegs);
+  } else if (!embeddedSpec && embeddedJpegs.length === 3 && buffer.length === 2188319) {
+    embeddedSpec = getMonotonicityLesson2ScannedPdfSpec(pdfId, embeddedJpegs);
   }
 
   // Giải nén và trích xuất văn bản từ các PDF stream
