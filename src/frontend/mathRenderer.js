@@ -169,12 +169,56 @@ export function convertLatexExpressionToHtml(latexRaw) {
 }
 
 /**
+ * Ảnh cắt trực tiếp từ trang PDF gốc (giữ nguyên 100% phông chữ, công thức, bảng biến thiên, đồ thị)
+ * Cú pháp: [[PDFCROP:url|pageW|pageH|x0|y0|x1|y1]]  (toạ độ theo pixel của ảnh trang)
+ */
+const PDF_CROP_REGEX = /\[\[PDFCROP:([^|\]]+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\]\]/g;
+const SEE_ABOVE_TOKEN = '[[SEE_ABOVE]]';
+
+function renderPdfCropHtml(url, pageW, pageH, x0, y0, x1, y1) {
+  const w = Math.max(10, x1 - x0);
+  const h = Math.max(10, y1 - y0);
+  const safeUrl = escapeHtml(url);
+  // Ảnh trang được dựng ở tỉ lệ ~2x (≈1190px chiều rộng A4) => hiển thị ở 1/1.35 kích thước để chữ có cỡ tự nhiên
+  const maxWidth = Math.round(w / 1.35);
+  return `<div class="pdf-crop" style="width:100%;max-width:${maxWidth}px;margin:4px 0;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${w} ${h}" preserveAspectRatio="xMinYMin meet" style="display:block;width:100%;height:auto;aspect-ratio:${w} / ${h};background:#fff;">
+      <image href="${safeUrl}" x="0" y="0" width="${pageW}" height="${pageH}" />
+    </svg>
+  </div>`;
+}
+
+/**
  * Render chuỗi văn bản có chứa công thức LaTeX ($$...$$ và $...$) sang HTML an toàn
  */
 export function renderMathText(rawText) {
   if (!rawText) return '';
-  const text = String(rawText);
+  const fullText = String(rawText);
 
+  if (fullText.trim() === SEE_ABOVE_TOKEN) {
+    return '<span class="text-slate-400 italic text-sm">(như trong đề bài)</span>';
+  }
+
+  if (fullText.includes('[[PDFCROP:')) {
+    let html = '';
+    let last = 0;
+    PDF_CROP_REGEX.lastIndex = 0;
+    let m;
+    while ((m = PDF_CROP_REGEX.exec(fullText)) !== null) {
+      const before = fullText.slice(last, m.index).trim();
+      if (before) html += renderMathTextCore(before);
+      html += renderPdfCropHtml(m[1], +m[2], +m[3], +m[4], +m[5], +m[6], +m[7]);
+      last = PDF_CROP_REGEX.lastIndex;
+    }
+    const after = fullText.slice(last).trim();
+    if (after) html += renderMathTextCore(after);
+    return html;
+  }
+
+  return renderMathTextCore(fullText);
+}
+
+function renderMathTextCore(text) {
   const tokens = [];
   let lastIndex = 0;
   const mathRegex = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
