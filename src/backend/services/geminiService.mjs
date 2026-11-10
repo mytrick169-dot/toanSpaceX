@@ -7,6 +7,7 @@ import {
   getMathDiagramSvg,
   createCroppedPageSvgFromJpeg,
 } from './pdfProcessorService.mjs';
+import { extractScannedPdfWithLocalOcr } from './scannedPdfOcrService.mjs';
 
 /**
  * Bộ giới hạn tần suất gọi Gemini API (Rate Limiter ở Backend)
@@ -55,6 +56,12 @@ export function logAiProcessing(entry) {
     fs.appendFileSync(logFile, logLine + '\n', 'utf-8');
 
     const db = getDb();
+    const validPdfId =
+      entry.pdfDocumentId &&
+      db.prepare('SELECT id FROM pdf_documents WHERE id = ?').get(Number(entry.pdfDocumentId))
+        ? Number(entry.pdfDocumentId)
+        : null;
+
     db.prepare(`
       INSERT INTO ai_processing_logs (
         pdf_document_id, file_name, file_size, model_requested, model_used,
@@ -62,7 +69,7 @@ export function logAiProcessing(entry) {
         status, error_message
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      entry.pdfDocumentId || null,
+      validPdfId,
       entry.fileName || '',
       entry.fileSize || 0,
       entry.modelRequested || ENV.GEMINI_MODEL,
@@ -872,6 +879,35 @@ export async function processPdfWithAiEngine({
         errorMessage: apiErr.message,
       });
 
+      // Nếu gọi Gemini API gặp lỗi và PDF là bản Scan ảnh JPEG, tự động dùng OCR chuyên dụng nội bộ
+      if (pdfInspection.embeddedJpegs && pdfInspection.embeddedJpegs.length > 0) {
+        try {
+          const ocrResult = await extractScannedPdfWithLocalOcr(pdfInspection, fileName);
+          if (ocrResult && ocrResult.questions && ocrResult.questions.length > 0) {
+            const structured = validateAndNormalizeExtractedJson(
+              ocrResult,
+              fileName.replace(/\.pdf$/i, ''),
+              pdfInspection.embeddedJpegs || []
+            );
+            return {
+              ...structured,
+              page_count: pdfInspection.pageCount,
+              ai_engine: {
+                mode: 'LOCAL_SCANNED_PDF_OCR_ENGINE',
+                model_requested: ENV.GEMINI_MODEL,
+                model_used: 'Bộ máy OCR & Phân tích cấu trúc Đề thi Scan (Tự động chuyển từ API)',
+                duration_ms: Date.now() - startTime,
+                notices: [
+                  `Thông báo: Đã tự động nhận diện ${structured.questions.length} câu hỏi từ ảnh scan (Trắc nghiệm, Đúng/Sai, Trả lời ngắn) và đối chiếu Bảng đáp án thành công.`,
+                ],
+              },
+            };
+          }
+        } catch (ocrErr) {
+          console.warn('[Scanned PDF OCR Fallback Warning]:', ocrErr.message);
+        }
+      }
+
       const fallbackStructured = parseMathPdfTextDirectly(pdfInspection, fileName, combinedText);
       if (fallbackStructured.questions.length > 0) {
         return {
@@ -894,6 +930,49 @@ export async function processPdfWithAiEngine({
   }
 
   // Trường hợp chưa cấu hình GEMINI_API_KEY trong .env:
+  // Nếu là PDF scan ảnh chụp, chạy trực tiếp bộ máy OCR nội bộ tốc độ cao:
+  if (pdfInspection.embeddedJpegs && pdfInspection.embeddedJpegs.length > 0) {
+    try {
+      const ocrResult = await extractScannedPdfWithLocalOcr(pdfInspection, fileName);
+      if (ocrResult && ocrResult.questions && ocrResult.questions.length > 0) {
+        const structured = validateAndNormalizeExtractedJson(
+          ocrResult,
+          fileName.replace(/\.pdf$/i, ''),
+          pdfInspection.embeddedJpegs || []
+        );
+        const durationMs = Date.now() - startTime;
+        logAiProcessing({
+          pdfDocumentId,
+          fileName,
+          fileSize: pdfBuffer.length,
+          modelRequested: ENV.GEMINI_MODEL,
+          modelUsed: 'LOCAL_SCANNED_PDF_OCR_ENGINE',
+          uploadMethod: 'tesseract_vision',
+          retryCount: 0,
+          durationMs,
+          questionsCount: structured.questions.length,
+          needsReviewCount: structured.needs_review_count,
+          status: structured.needs_review_count > 0 ? 'NEEDS_REVIEW' : 'COMPLETED',
+        });
+        return {
+          ...structured,
+          page_count: pdfInspection.pageCount,
+          ai_engine: {
+            mode: 'LOCAL_SCANNED_PDF_OCR_ENGINE',
+            model_requested: ENV.GEMINI_MODEL,
+            model_used: 'Bộ máy OCR & Phân tích cấu trúc Đề thi Scan SpaceX Math',
+            duration_ms: durationMs,
+            notices: [
+              `Đã tự động nhận diện ${structured.questions.length} câu hỏi (Trắc nghiệm, Đúng/Sai, Trả lời ngắn) và đối chiếu Bảng đáp án thành công.`,
+            ],
+          },
+        };
+      }
+    } catch (ocrErr) {
+      console.warn('[Scanned PDF OCR Error]:', ocrErr.message);
+    }
+  }
+
   const directStructured = parseMathPdfTextDirectly(pdfInspection, fileName, combinedText);
   const durationMs = Date.now() - startTime;
 

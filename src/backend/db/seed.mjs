@@ -488,11 +488,13 @@ export function rebuildToan12Curriculum() {
       );
     }
 
-    // Gắn đề BTVN Tính đơn điệu hàm số Buổi 1 (id = 9) và Buổi 2 (id = 10) vào Chương I
+    // Gắn đề BTVN Tính đơn điệu hàm số Buổi 1 (id = 9), Tài liệu Buổi 2 (id = 10) và BTVN Buổi 2 (id = 11) vào Chương I
     db.prepare('UPDATE exams SET subject_id = 1, chapter_id = 1, lesson_id = 2 WHERE id = 9').run();
     db.prepare('UPDATE pdf_documents SET subject_id = 1, chapter_id = 1, lesson_id = 2 WHERE id = 9').run();
     db.prepare('UPDATE exams SET subject_id = 1, chapter_id = 1, lesson_id = 3 WHERE id = 10').run();
     db.prepare('UPDATE pdf_documents SET subject_id = 1, chapter_id = 1, lesson_id = 3 WHERE id = 10').run();
+    db.prepare('UPDATE exams SET subject_id = 1, chapter_id = 1, lesson_id = 3 WHERE id = 11').run();
+    db.prepare('UPDATE pdf_documents SET subject_id = 1, chapter_id = 1, lesson_id = 3 WHERE id = 11').run();
   } finally {
     db.exec('PRAGMA foreign_keys = ON;');
   }

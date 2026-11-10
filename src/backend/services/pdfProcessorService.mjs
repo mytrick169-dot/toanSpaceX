@@ -11,11 +11,11 @@ import { ensureStorageDirs } from './storageService.mjs';
 export function createCroppedPageSvgFromJpeg(pageImageUrl, bbox = [200, 700, 500, 960]) {
   const [ymin, xmin, ymax, xmax] = bbox.map((v) => Number(v || 0));
   const w = Math.max(50, xmax - xmin);
-  const h = Math.max(50, ymax - ymin);
-  const displayWidth = w / h > 2.0 ? 420 : 280;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${xmin} ${ymin} ${w} ${h}" width="${displayWidth}" height="${Math.round(
-    (displayWidth * h) / w
-  )}" style="max-width:100%;background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;display:block;margin:0 auto;">
+  const h = Math.max(30, ymax - ymin);
+  const isFullWidthCrop = w >= 700;
+  const displayWidth = isFullWidthCrop ? 780 : w / h > 2.0 ? 440 : 300;
+  const displayHeight = Math.round((displayWidth * h * 1.414) / w);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${xmin} ${ymin} ${w} ${h}" width="${displayWidth}" height="${displayHeight}" style="width:100%;max-width:${displayWidth}px;height:auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;display:block;margin:0 auto;">
     <image href="${pageImageUrl}" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none" />
   </svg>`;
 }
@@ -60,6 +60,7 @@ export function extractEmbeddedJpegsFromPdfBuffer(buffer, pdfId = 'temp') {
         jpegs.push({
           page: pageIdx,
           fileName,
+          filePath: fullPath,
           url: `/api/storage/figures/${fileName}`,
           byteLength: jpgBuf.length,
         });

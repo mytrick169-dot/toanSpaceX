@@ -10,5 +10,9 @@
     "public": "node --no-warnings start-public.mjs",
     "seed": "node --no-warnings src/backend/db/seed.mjs",
     "test": "node --no-warnings tests/verify-all.mjs"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "tesseract.js": "^7.0.0"
   }
 }

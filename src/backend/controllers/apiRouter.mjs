@@ -222,6 +222,7 @@ export async function handleApiRequest(req, res, urlObj) {
                 };
               });
             return {
+
               ...c,
               lessons: chLessons,
             };
@@ -502,9 +503,8 @@ export async function handleApiRequest(req, res, urlObj) {
 
         rebuildLeaderboardTables();
         return sendJson(res, 200, {
-          message: `Đã cập nhật tài khoản học sinh "${newFullName}" (Trạng thái: ${
-            newStatus === 'ACTIVE' ? 'Đang hoạt động' : 'Đã khóa'
-          }).`,
+          message: `Đã cập nhật tài khoản học sinh "${newFullName}" (Trạng thái: ${newStatus === 'ACTIVE' ? 'Đang hoạt động' : 'Đã khóa'
+            }).`,
         });
       }
 
@@ -738,8 +738,7 @@ export async function handleApiRequest(req, res, urlObj) {
         title: body.title || aiResult.exam_title || fileName.replace(/\.pdf$/i, ''),
         description:
           body.description ||
-          `Đề thi được chuyển đổi tự động từ file PDF "${fileName}" qua AI Engine (${
-            aiResult.ai_engine?.model_used || ENV.GEMINI_MODEL
+          `Đề thi được chuyển đổi tự động từ file PDF "${fileName}" qua AI Engine (${aiResult.ai_engine?.model_used || ENV.GEMINI_MODEL
           }).`,
         examType: body.examType || 'EXAM',
         subjectId: validSubjectId,
@@ -1263,8 +1262,8 @@ export async function handleApiRequest(req, res, urlObj) {
           completionStatus: inProgressAtt
             ? 'IN_PROGRESS'
             : completedAtts.length > 0
-            ? 'COMPLETED'
-            : 'NOT_STARTED',
+              ? 'COMPLETED'
+              : 'NOT_STARTED',
         };
       });
 
