@@ -2253,6 +2253,136 @@ window.SpaceXApp = {
     }
   },
 
+  switchUploadMode(mode) {
+    const tabApi = document.getElementById('upload-mode-tab-api');
+    const tabWeb = document.getElementById('upload-mode-tab-web');
+    const webPanel = document.getElementById('gemini-web-guide-panel');
+    const btnApi = document.getElementById('btn-start-ai-parse');
+    const btnWeb = document.getElementById('btn-start-import-json');
+
+    if (mode === 'web') {
+      if (tabApi) tabApi.className = 'px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+      if (tabWeb) tabWeb.className = 'px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white transition shadow-sm';
+      webPanel?.classList.remove('hidden');
+      btnApi?.classList.add('hidden');
+      btnWeb?.classList.remove('hidden');
+    } else {
+      if (tabApi) tabApi.className = 'px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white transition shadow-sm';
+      if (tabWeb) tabWeb.className = 'px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+      webPanel?.classList.add('hidden');
+      btnApi?.classList.remove('hidden');
+      btnWeb?.classList.add('hidden');
+    }
+  },
+
+  copyGeminiPrompt() {
+    const promptText = `Bạn là một chuyên gia số hóa đề thi Toán THPT của Bộ Giáo dục & Đào tạo.
+Hãy đọc kỹ file PDF đề thi đính kèm và trích xuất TOÀN BỘ câu hỏi ra định dạng JSON chuẩn theo đúng cấu trúc sau (chỉ trả về khối mã JSON duy nhất, không thêm bất kỳ lời chào hay giải thích nào khác):
+
+\`\`\`json
+{
+  "exam_title": "Tên đề thi (lấy theo tiêu đề trong PDF)",
+  "questions": [
+    {
+      "question_number": 1,
+      "question_type": "multiple_choice",
+      "content": "Nội dung câu hỏi, toàn bộ công thức toán viết dạng LaTeX kẹp giữa $...$ hoặc $$...$$",
+      "options": {
+        "A": "Phương án A",
+        "B": "Phương án B",
+        "C": "Phương án C",
+        "D": "Phương án D"
+      },
+      "correct_answer": "A",
+      "explanation": "Lời giải chi tiết nếu có"
+    },
+    {
+      "question_number": 2,
+      "question_type": "true_false",
+      "content": "Nội dung câu hỏi Đúng/Sai...",
+      "statements": {
+        "a": { "content": "Mệnh đề a", "correct": true },
+        "b": { "content": "Mệnh đề b", "correct": false },
+        "c": { "content": "Mệnh đề c", "correct": true },
+        "d": { "content": "Mệnh đề d", "correct": false }
+      },
+      "explanation": "Lời giải chi tiết..."
+    },
+    {
+      "question_number": 3,
+      "question_type": "short_answer",
+      "content": "Nội dung câu hỏi trả lời ngắn...",
+      "correct_answer": "2.5",
+      "explanation": "Lời giải chi tiết..."
+    }
+  ]
+}
+\`\`\`
+
+Quy tắc bắt buộc:
+1. Đối chiếu Bảng đáp án ở các trang cuối file PDF để điền chính xác "correct_answer" hoặc "correct: true/false" cho từng câu.
+2. Công thức toán học bắt buộc viết dạng LaTeX ($...$).
+3. Không bỏ sót bất kỳ câu hỏi nào trong đề.`;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(promptText).then(() => {
+        showToast('Đã sao chép Câu lệnh Prompt chuẩn vào bộ nhớ đệm! Thầy chỉ cần mở Gemini Web và dán vào.', 'success');
+      }).catch(() => {
+        showToast('Vui lòng sao chép câu lệnh thủ công từ hướng dẫn.', 'error');
+      });
+    } else {
+      showToast('Đã sẵn sàng câu lệnh Prompt!', 'success');
+    }
+  },
+
+  async executeImportGeminiJson() {
+    const jsonContent = document.getElementById('gemini-web-json-input')?.value?.trim();
+    if (!jsonContent) {
+      showToast('Vui lòng dán đoạn mã JSON từ Gemini Web vào ô nhập liệu!', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-start-import-json');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang xử lý & Tạo đề thi từ Gemini Web...';
+    }
+
+    try {
+      const payload = {
+        jsonContent,
+        pdfBase64: AppState.selectedPdfBase64 || null,
+        fileName: AppState.selectedPdfName || 'De_Thi_Toan.pdf',
+        title: document.getElementById('upload-exam-title')?.value || '',
+        subjectId: document.getElementById('upload-subject-id')?.value || 1,
+        examType: document.getElementById('upload-exam-type')?.value || 'EXAM',
+        chapterId: document.getElementById('upload-chapter-id')?.value || null,
+        lessonId: document.getElementById('upload-lesson-id')?.value || null,
+        defaultDurationMinutes: document.getElementById('upload-duration')?.value || 45,
+        allowUnlimitedTime: document.getElementById('upload-unlimited')?.checked ?? true,
+        allowReview: document.getElementById('upload-allow-review')?.checked ?? true,
+      };
+
+      const res = await apiFetch('/api/admin/exams/import-json', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      AppState.selectedPdfBase64 = null;
+      AppState.selectedPdfName = '';
+
+      showToast(res.message || 'Tạo đề thi từ Gemini Web thành công!', 'success');
+      navigate(`#/admin/exam-detail/${res.exam.id}`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '✨ Tạo Đề Thi Ngay Từ Dữ Liệu Gemini Web (0đ API)';
+      }
+    }
+  },
+
   // ---------------- QUẢN LÝ FILE PDF GỐC ----------------
   openLinkPdfExamsModal(pdfId) {
     const exams = AppState.allExamsCache || [];

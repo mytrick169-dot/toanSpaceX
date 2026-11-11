@@ -20,6 +20,7 @@ import {
 import {
   checkGeminiStatus,
   processPdfWithAiEngine,
+  validateAndNormalizeExtractedJson,
 } from '../services/geminiService.mjs';
 import {
   createExamFromAiExtraction,
@@ -930,6 +931,79 @@ export async function handleApiRequest(req, res, urlObj) {
         message: 'Đã đọc file PDF và chuyển đổi thành đề thi thành công!',
         pdfDocumentId: pdfDocId,
         aiEngine: aiResult.ai_engine,
+        exam: createdExam,
+      });
+    }
+
+    // Nhập trực tiếp kết quả JSON từ Gemini Web (Dành cho tài khoản Gemini cá nhân của giáo viên)
+    if (pathname === '/api/admin/exams/import-json' && method === 'POST') {
+      const admin = requireAdmin(req);
+      const body = await readJsonBody(req);
+
+      if (!body.jsonContent || !String(body.jsonContent).trim()) {
+        return sendJson(res, 400, { error: 'Vui lòng dán nội dung JSON trích xuất từ Gemini.' });
+      }
+
+      let parsed;
+      try {
+        let cleaned = String(body.jsonContent).trim();
+        cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch (parseErr) {
+        return sendJson(res, 400, {
+          error: 'Nội dung JSON không đúng định dạng. Lỗi: ' + parseErr.message
+        });
+      }
+
+      let pdfDocId = null;
+      let fileName = body.fileName || 'De_Thi_Toan.pdf';
+      if (body.pdfBase64) {
+        const rawBase64 = body.pdfBase64.replace(/^data:application\/pdf;base64,/, '');
+        const pdfBuffer = Buffer.from(rawBase64, 'base64');
+        const savedFile = savePdfBuffer(fileName, pdfBuffer);
+
+        const pdfInsert = db.prepare(`
+          INSERT INTO pdf_documents (
+            title, file_name, file_path, file_size, page_count,
+            subject_id, chapter_id, lesson_id, uploaded_by, parse_status, ai_model_used
+          ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'COMPLETED', 'Gemini Advanced (Web Prompt)')
+        `).run(
+          body.title || parsed.exam_title || fileName.replace(/\.pdf$/i, ''),
+          fileName,
+          savedFile.relativePath,
+          savedFile.fileSize,
+          body.subjectId ? Number(body.subjectId) : null,
+          body.chapterId ? Number(body.chapterId) : null,
+          body.lessonId ? Number(body.lessonId) : null,
+          admin.id
+        );
+        pdfDocId = Number(pdfInsert.lastInsertRowid);
+      }
+
+      const examTitle = body.title || parsed.exam_title || fileName.replace(/\.pdf$/i, '') || 'Đề thi mới';
+      const normalized = validateAndNormalizeExtractedJson(parsed, examTitle);
+
+      const createdExam = createExamFromAiExtraction({
+        title: examTitle,
+        description:
+          body.description ||
+          `Đề thi được tạo trực tiếp từ kết quả trích xuất của Gemini Advanced (Web).`,
+        examType: body.examType || 'EXAM',
+        subjectId: body.subjectId ? Number(body.subjectId) : null,
+        chapterId: body.chapterId ? Number(body.chapterId) : null,
+        lessonId: body.lessonId ? Number(body.lessonId) : null,
+        pdfDocumentId: pdfDocId,
+        defaultDurationMinutes: Number(body.defaultDurationMinutes || 45),
+        allowUnlimitedTime: body.allowUnlimitedTime !== false,
+        allowReview: body.allowReview !== false,
+        questions: normalized.questions,
+        createdBy: admin.id,
+        publishImmediately: false,
+      });
+
+      return sendJson(res, 201, {
+        message: `Đã tạo đề thi thành công với ${normalized.questions.length} câu hỏi từ Gemini Web!`,
+        pdfDocumentId: pdfDocId,
         exam: createdExam,
       });
     }

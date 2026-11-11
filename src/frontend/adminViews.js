@@ -788,6 +788,56 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
       <!-- Khung Upload PDF & Tùy chọn Phân loại Tự động -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-2 card p-6 space-y-5">
+          <!-- Chọn Phương thức Tạo Đề thi -->
+          <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+            <button
+              id="upload-mode-tab-api"
+              type="button"
+              onclick="window.SpaceXApp.switchUploadMode('api')"
+              class="px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white transition shadow-sm"
+            >
+              🚀 Cách 1: Tải PDF tự động bằng API
+            </button>
+            <button
+              id="upload-mode-tab-web"
+              type="button"
+              onclick="window.SpaceXApp.switchUploadMode('web')"
+              class="px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+            >
+              💎 Cách 2: Dán kết quả từ Gemini Web (Gói trả phí của thầy • 0đ API)
+            </button>
+          </div>
+
+          <!-- Khối hướng dẫn khi dùng Gemini Web (Gói trả phí) -->
+          <div id="gemini-web-guide-panel" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-bold text-amber-900">
+                💡 Tận dụng gói Gemini Advanced trên web của thầy (Không bao giờ lo hết hạn ngạch API):
+              </span>
+              <button
+                type="button"
+                onclick="window.SpaceXApp.copyGeminiPrompt()"
+                class="btn btn-primary text-xs font-bold"
+              >
+                📋 Sao chép Câu lệnh Prompt cho Gemini
+              </button>
+            </div>
+            <ol class="text-xs text-amber-800 list-decimal list-inside space-y-1">
+              <li>Mở web <strong>gemini.google.com</strong> và đính kèm file PDF đề thi của thầy.</li>
+              <li>Bấm nút <strong>"Sao chép Câu lệnh Prompt"</strong> ở trên, dán vào khung chat Gemini rồi bấm gửi.</li>
+              <li>Sao chép toàn bộ khối mã <code>json</code> mà Gemini trả về và dán vào ô bên dưới.</li>
+            </ol>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Dán kết quả JSON từ Gemini Web vào đây:</label>
+              <textarea
+                id="gemini-web-json-input"
+                rows="8"
+                placeholder="Dán khối mã JSON trích xuất từ Gemini Web vào đây..."
+                class="input text-xs font-mono w-full"
+              ></textarea>
+            </div>
+          </div>
+
           <h3 class="text-lg font-bold text-slate-900">1. Chọn File PDF Đề thi & Cấu hình Phân loại</h3>
 
           <!-- Khu vực chọn file PDF -->
@@ -885,6 +935,14 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
             class="btn btn-primary w-full py-3 text-base font-bold shadow"
           >
             🚀 Bắt đầu Phân tích PDF & Tự động Tạo Đề thi bằng AI
+          </button>
+
+          <button
+            id="btn-start-import-json"
+            onclick="window.SpaceXApp.executeImportGeminiJson()"
+            class="hidden btn btn-primary w-full py-3 text-base font-bold shadow bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+          >
+            ✨ Tạo Đề Thi Ngay Từ Dữ Liệu Gemini Web (0đ API)
           </button>
         </div>
 
