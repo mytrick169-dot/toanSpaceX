@@ -138,6 +138,59 @@ function extractSortedLinesFromPage(page) {
 }
 
 /**
+ * Trích xuất các phương án Trắc nghiệm 4 lựa chọn (A, B, C, D) từ chuỗi văn bản
+ * Hỗ trợ cả 1 phương án/dòng, 2 phương án/dòng và 4 phương án trên 1 dòng
+ */
+function extractMcOptions(fullText) {
+  const optRegex = /(?:^|[\s\t\n])([A-D])\s*[\.:\)](?!\w)/g;
+  const tokens = [];
+  let m;
+  while ((m = optRegex.exec(fullText)) !== null) {
+    const matchStr = m[0];
+    const letterIdx = m.index + matchStr.indexOf(m[1]);
+    tokens.push({ opt: m[1], index: letterIdx });
+  }
+  if (tokens.length >= 2) {
+    const opts = {};
+    for (let i = 0; i < tokens.length; i++) {
+      const cur = tokens[i];
+      const next = tokens[i + 1];
+      const val = next ? fullText.slice(cur.index, next.index) : fullText.slice(cur.index);
+      opts[cur.opt] = val.replace(/^[A-D]\s*[\.:\)]\s*/, '').replace(/\n+/g, ' ').trim();
+    }
+    const stem = fullText.slice(0, tokens[0].index).trim();
+    return { stem, opts };
+  }
+  return null;
+}
+
+/**
+ * Trích xuất các mệnh đề Đúng/Sai (a, b, c, d) từ chuỗi văn bản
+ */
+function extractTfStatements(fullText) {
+  const stmtRegex = /(?:^|[\s\t\n])([a-d])\s*[\.:\)](?!\w)/g;
+  const tokens = [];
+  let m;
+  while ((m = stmtRegex.exec(fullText)) !== null) {
+    const matchStr = m[0];
+    const letterIdx = m.index + matchStr.indexOf(m[1]);
+    tokens.push({ stmt: m[1].toLowerCase(), index: letterIdx });
+  }
+  if (tokens.length >= 2) {
+    const stmts = {};
+    for (let i = 0; i < tokens.length; i++) {
+      const cur = tokens[i];
+      const next = tokens[i + 1];
+      const val = next ? fullText.slice(cur.index, next.index) : fullText.slice(cur.index);
+      stmts[cur.stmt] = val.replace(/^[a-d]\s*[\.:\)]\s*/i, '').replace(/\n+/g, ' ').trim();
+    }
+    const stem = fullText.slice(0, tokens[0].index).trim();
+    return { stem, stmts };
+  }
+  return null;
+}
+
+/**
  * Bộ phân tích và trích xuất PDF Toán học số hóa (Digital PDF) sử dụng MuPDF:
  * - Dựng trang chất lượng cao (2x DPI) để giữ nguyên bảng biến thiên, đồ thị, hình vẽ
  * - Tự động nhận diện cấu trúc Câu hỏi (Trắc nghiệm, Đúng/Sai, Trả lời ngắn)
@@ -187,11 +240,11 @@ export async function parseDigitalPdfWithMuPdf(pdfBuffer, fileName = 'De_Thi_Toa
       lines.filter((l) => /^C[âa]u\s*\d+\s*[:.]/i.test(l.text)).length === 0;
     if (isOnlyAnswerPage) continue;
 
-    // Tìm các mốc bắt đầu của Câu hỏi trên trang
+    // Tìm các mốc bắt đầu của Câu hỏi trên trang (Câu 1, Bài 1,...)
     const qStarts = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
-      const m = l.text.match(/^C[âa]u\s*(\d+)\s*[:.]/i);
+      const m = l.text.match(/^(?:C[âa]u|B[àa]i)\s*(\d+)\s*[:.)\s]/i);
       if (m) {
         qStarts.push({ qNum: Number(m[1]), y0: l.y, lineIdx: i });
       }
@@ -219,54 +272,41 @@ export async function parseDigitalPdfWithMuPdf(pdfBuffer, fileName = 'De_Thi_Toa
       const bboxNorm = [yminNorm, 40, Math.max(yminNorm + 30, ymaxNorm), 960];
       const croppedSvg = createCroppedPageSvgFromJpeg(pageJpegs[p].url, bboxNorm);
 
-      // Nhận diện dạng câu hỏi: TRUE_FALSE, MULTIPLE_CHOICE, hay SHORT_ANSWER
-      const hasTfStatements = qLines.some((l) => /^[a-d]\)/i.test(l.text));
-      const hasMcOptions = qLines.some((l) => /^[A-D]\s*[.:]/i.test(l.text));
+      const rawJoinedText = qLines.map((l) => l.text).join('\n');
+      const textWithoutQNum = rawJoinedText.replace(/^(?:C[âa]u|B[àa]i)\s*\d+\s*[:.)\s]*/i, '').trim();
+
+      const tfParsed = extractTfStatements(textWithoutQNum);
+      const mcParsed = extractMcOptions(textWithoutQNum);
 
       let qType = 'SHORT_ANSWER';
-      if (answerMap.tf[qInfo.qNum] || hasTfStatements) {
+      if (answerMap.tf[qInfo.qNum] || (tfParsed && Object.keys(tfParsed.stmts).length >= 2)) {
         qType = 'TRUE_FALSE';
-      } else if (answerMap.mc[qInfo.qNum] || hasMcOptions) {
+      } else if (answerMap.mc[qInfo.qNum] || (mcParsed && Object.keys(mcParsed.opts).length >= 2)) {
         qType = 'MULTIPLE_CHOICE';
       }
-
-      // Tách phần thân đề bài (stem) và các mệnh đề/phương án
-      const groups = { stem: [], a: [], b: [], c: [], d: [], A: [], B: [], C: [], D: [] };
-      let curGroup = 'stem';
-
-      for (const l of qLines) {
-        const tfMatch = l.text.match(/^([a-d])\)/i);
-        const mcMatch = l.text.match(/^([A-D])\s*[.:]/);
-        if (qType === 'TRUE_FALSE' && tfMatch) {
-          curGroup = tfMatch[1].toLowerCase();
-        } else if (qType === 'MULTIPLE_CHOICE' && mcMatch) {
-          curGroup = mcMatch[1].toUpperCase();
-        }
-        groups[curGroup].push(l.text);
-      }
-
-      const stemText = groups.stem.join(' ').replace(/^C[âa]u\s*\d+\s*[:.]\s*/i, '').trim();
 
       if (qType === 'TRUE_FALSE') {
         const tfAns = answerMap.tf[qInfo.qNum] || null;
         const stmts = {
           a: {
-            content: groups.a.join(' ').replace(/^a\)\s*/i, '').trim() || 'Mệnh đề a (xem trên đề bài)',
+            content: tfParsed?.stmts?.a || 'Mệnh đề a (xem trên đề bài)',
             correct: tfAns ? Boolean(tfAns.a) : true,
           },
           b: {
-            content: groups.b.join(' ').replace(/^b\)\s*/i, '').trim() || 'Mệnh đề b (xem trên đề bài)',
+            content: tfParsed?.stmts?.b || 'Mệnh đề b (xem trên đề bài)',
             correct: tfAns ? Boolean(tfAns.b) : false,
           },
           c: {
-            content: groups.c.join(' ').replace(/^c\)\s*/i, '').trim() || 'Mệnh đề c (xem trên đề bài)',
+            content: tfParsed?.stmts?.c || 'Mệnh đề c (xem trên đề bài)',
             correct: tfAns ? Boolean(tfAns.c) : true,
           },
           d: {
-            content: groups.d.join(' ').replace(/^d\)\s*/i, '').trim() || 'Mệnh đề d (xem trên đề bài)',
+            content: tfParsed?.stmts?.d || 'Mệnh đề d (xem trên đề bài)',
             correct: tfAns ? Boolean(tfAns.d) : false,
           },
         };
+
+        const stemText = (tfParsed?.stem || textWithoutQNum).replace(/\n+/g, ' ').trim();
 
         extractedQuestions.push({
           question_number: qInfo.qNum,
@@ -285,13 +325,15 @@ export async function parseDigitalPdfWithMuPdf(pdfBuffer, fileName = 'De_Thi_Toa
       } else if (qType === 'MULTIPLE_CHOICE') {
         const mcAns = answerMap.mc[qInfo.qNum] || '';
         const options = {
-          A: groups.A.join(' ').replace(/^A\s*[.:]\s*/i, '').trim() || 'Phương án A',
-          B: groups.B.join(' ').replace(/^B\s*[.:]\s*/i, '').trim() || 'Phương án B',
-          C: groups.C.join(' ').replace(/^C\s*[.:]\s*/i, '').trim() || 'Phương án C',
-          D: groups.D.join(' ').replace(/^D\s*[.:]\s*/i, '').trim() || 'Phương án D',
+          A: mcParsed?.opts?.A || 'Phương án A',
+          B: mcParsed?.opts?.B || 'Phương án B',
+          C: mcParsed?.opts?.C || 'Phương án C',
+          D: mcParsed?.opts?.D || 'Phương án D',
         };
 
         const hasAns = ['A', 'B', 'C', 'D'].includes(mcAns);
+        const stemText = (mcParsed?.stem || textWithoutQNum).replace(/\n+/g, ' ').trim();
+
         extractedQuestions.push({
           question_number: qInfo.qNum,
           question_type: 'multiple_choice',
@@ -308,6 +350,11 @@ export async function parseDigitalPdfWithMuPdf(pdfBuffer, fileName = 'De_Thi_Toa
         });
       } else {
         const saAns = answerMap.sa[qInfo.qNum] || '';
+        const stemText = textWithoutQNum
+          .replace(/(?:Điền\s+)?(?:Đáp\s*(?:án|số)|Kết\s*quả)\s*[:.\s_-]+.*$/i, '')
+          .replace(/\n+/g, ' ')
+          .trim();
+
         extractedQuestions.push({
           question_number: qInfo.qNum,
           question_type: 'short_answer',
@@ -336,3 +383,4 @@ export async function parseDigitalPdfWithMuPdf(pdfBuffer, fileName = 'De_Thi_Toa
     embeddedJpegs: pageJpegs,
   };
 }
+

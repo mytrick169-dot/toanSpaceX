@@ -273,6 +273,18 @@ function initSchema(db) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- 17. VIP_CODES (Kho mã VIP do Giáo viên cấp để học sinh tự khôi phục mật khẩu)
+    CREATE TABLE IF NOT EXISTS vip_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      note TEXT,
+      is_active INTEGER DEFAULT 1,
+      use_count INTEGER DEFAULT 0,
+      last_used_at TEXT,
+      last_used_username TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
     CREATE INDEX IF NOT EXISTS idx_chapters_subject ON chapters(subject_id);
     CREATE INDEX IF NOT EXISTS idx_lessons_chapter ON lessons(chapter_id);

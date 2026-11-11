@@ -132,6 +132,129 @@ function navigate(hash) {
 }
 
 /**
+ * Render Trang Quên mật khẩu (#/forgot-password) - Khôi phục bằng Mã VIP do Giáo viên cấp
+ * Bước 1: Nhập Username + Mã VIP  ->  Bước 2: Hiện ô tạo mật khẩu mới
+ */
+function renderForgotPasswordPage() {
+  const appRoot = document.getElementById('app-root');
+  const lastUsername = (localStorage.getItem('spacex_last_username') || '').replace(/"/g, '&quot;');
+
+  appRoot.innerHTML = `
+    <div class="min-h-screen bg-slate-50 flex flex-col justify-center py-10 px-4">
+      <div class="max-w-md w-full mx-auto">
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-500 text-white font-extrabold text-xl shadow-md mb-3">
+            🔑
+          </div>
+          <h1 class="text-2xl font-extrabold text-slate-900">Khôi phục Mật khẩu</h1>
+          <p class="text-sm text-slate-500 mt-1">
+            Nhập tên đăng nhập và <strong>Mã VIP</strong> do Giáo viên cấp để tạo mật khẩu mới.
+          </p>
+        </div>
+
+        <div class="card p-6 sm:p-8 shadow-lg border-slate-200">
+          <!-- BƯỚC 1: Xác thực Mã VIP -->
+          <form id="forgot-step1" onsubmit="window.SpaceXApp.submitForgotVerify(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Tên đăng nhập (Username)</label>
+              <input
+                id="forgot-username"
+                type="text"
+                autocomplete="username"
+                value="${lastUsername}"
+                required
+                placeholder="Nhập username của bạn (VD: an12a1)"
+                class="input"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-amber-700 mb-1">Mã VIP (do Giáo viên cấp)</label>
+              <input
+                id="forgot-vipcode"
+                type="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                required
+                placeholder="VD: VIP-AB12-CD34"
+                class="input font-mono tracking-wider uppercase border-amber-300"
+              />
+            </div>
+            <button id="forgot-step1-btn" type="submit" class="btn w-full py-2.5 text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white">
+              Xác nhận Mã VIP →
+            </button>
+          </form>
+
+          <!-- BƯỚC 2: Tạo mật khẩu mới (chỉ hiện khi Mã VIP hợp lệ) -->
+          <form id="forgot-step2" onsubmit="window.SpaceXApp.submitForgotReset(event)" class="space-y-4 hidden">
+            <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+              ✓ Mã VIP hợp lệ! Tạo mật khẩu mới cho tài khoản
+              <strong id="forgot-verified-name"></strong>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-bold text-blue-700">Mật khẩu mới (Tối thiểu 6 ký tự)</label>
+                <button
+                  type="button"
+                  onclick="window.SpaceXApp.togglePasswordField('forgot-newpwd', this)"
+                  class="text-[11px] font-semibold text-blue-600 hover:underline"
+                >
+                  👁️ Hiện mật khẩu
+                </button>
+              </div>
+              <input
+                id="forgot-newpwd"
+                type="password"
+                autocomplete="new-password"
+                required
+                minlength="6"
+                placeholder="Nhập mật khẩu mới"
+                class="input border-blue-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-blue-700 mb-1">Nhập lại mật khẩu mới</label>
+              <input
+                id="forgot-confirmpwd"
+                type="password"
+                autocomplete="new-password"
+                required
+                minlength="6"
+                placeholder="Nhập lại mật khẩu mới"
+                class="input border-blue-300"
+              />
+            </div>
+            <button id="forgot-step2-btn" type="submit" class="btn btn-primary w-full py-2.5 text-sm font-bold">
+              Lưu mật khẩu mới & Đăng nhập →
+            </button>
+            <button
+              type="button"
+              onclick="window.SpaceXApp.navigate('#/forgot-password')"
+              class="w-full text-xs font-semibold text-slate-500 hover:underline"
+            >
+              ← Nhập lại Username / Mã VIP khác
+            </button>
+          </form>
+
+          <div class="mt-6 pt-5 border-t border-slate-100 text-center space-y-2">
+            <p class="text-[11px] text-slate-500">
+              Chưa có Mã VIP? Vui lòng liên hệ trực tiếp <strong>Giáo viên</strong> để được cấp.
+            </p>
+            <button
+              type="button"
+              onclick="window.SpaceXApp.navigate('#/login')"
+              class="btn btn-secondary w-full py-2.5 text-xs font-bold"
+            >
+              ← Quay lại Đăng nhập
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
  * Render Trang Đăng nhập (#/login) và Đăng ký (#/register)
  */
 function renderAuthPage(mode = 'login') {
@@ -214,6 +337,15 @@ function renderAuthPage(mode = 'login') {
               <button type="submit" class="btn btn-primary w-full py-2.5 text-sm font-bold">
                 Đăng nhập vào Hệ thống →
               </button>
+              <div class="text-center">
+                <button
+                  type="button"
+                  onclick="window.SpaceXApp.navigate('#/forgot-password')"
+                  class="text-xs font-bold text-amber-700 hover:text-amber-800 hover:underline"
+                >
+                  🔑 Quên mật khẩu? Khôi phục bằng Mã VIP
+                </button>
+              </div>
             </form>
 
             <!-- Gợi ý cho Học sinh mới chưa có tài khoản -->
@@ -432,6 +564,8 @@ async function handleRouteChange() {
   if (!AppState.token || !AppState.user) {
     if (rawHash === '#/register') {
       renderAuthPage('register');
+    } else if (rawHash === '#/forgot-password') {
+      renderForgotPasswordPage();
     } else {
       renderAuthPage('login');
     }
@@ -439,7 +573,13 @@ async function handleRouteChange() {
   }
 
   const isAdmin = AppState.user.role === 'ADMIN';
-  if (!rawHash || rawHash === '#/' || rawHash === '#/login' || rawHash === '#/register') {
+  if (
+    !rawHash ||
+    rawHash === '#/' ||
+    rawHash === '#/login' ||
+    rawHash === '#/register' ||
+    rawHash === '#/forgot-password'
+  ) {
     navigate(isAdmin ? '#/admin/dashboard' : '#/student/dashboard');
     return;
   }
@@ -764,6 +904,75 @@ window.SpaceXApp = {
       navigate(data.user.role === 'ADMIN' ? '#/admin/dashboard' : '#/student/dashboard');
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  },
+
+  async submitForgotVerify(e) {
+    e.preventDefault();
+    const username = document.getElementById('forgot-username').value.trim();
+    const vipCode = document.getElementById('forgot-vipcode').value.trim();
+    const btn = document.getElementById('forgot-step1-btn');
+    if (btn) btn.disabled = true;
+    try {
+      const data = await apiFetch('/api/auth/forgot-password/verify', {
+        method: 'POST',
+        body: JSON.stringify({ username, vipCode }),
+      });
+      AppState.forgotPassword = { username: data.username, vipCode };
+      document.getElementById('forgot-verified-name').textContent = `${data.fullName} (@${data.username})`;
+      document.getElementById('forgot-step1').classList.add('hidden');
+      document.getElementById('forgot-step2').classList.remove('hidden');
+      document.getElementById('forgot-newpwd').focus();
+      showToast(data.message);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  async submitForgotReset(e) {
+    e.preventDefault();
+    const ctx = AppState.forgotPassword;
+    if (!ctx) {
+      showToast('Vui lòng xác nhận lại Mã VIP.', 'error');
+      navigate('#/forgot-password');
+      return;
+    }
+    const newPassword = document.getElementById('forgot-newpwd').value;
+    const confirmPassword = document.getElementById('forgot-confirmpwd').value;
+    if (newPassword.trim().length < 6) {
+      showToast('Mật khẩu mới phải có ít nhất 6 ký tự.', 'error');
+      return;
+    }
+    if (newPassword.trim() !== confirmPassword.trim()) {
+      showToast('Mật khẩu nhập lại không khớp.', 'error');
+      return;
+    }
+    const btn = document.getElementById('forgot-step2-btn');
+    if (btn) btn.disabled = true;
+    try {
+      const data = await apiFetch('/api/auth/forgot-password/reset', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: ctx.username,
+          vipCode: ctx.vipCode,
+          newPassword,
+          confirmPassword,
+        }),
+      });
+      AppState.forgotPassword = null;
+      AppState.token = data.token;
+      AppState.user = data.user;
+      localStorage.setItem('spacex_math_token', data.token);
+      localStorage.setItem('spacex_math_user', JSON.stringify(data.user));
+      localStorage.setItem('spacex_last_username', data.user.username);
+      showToast(data.message);
+      navigate('#/student/dashboard');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
     }
   },
 
@@ -1186,6 +1395,170 @@ window.SpaceXApp = {
       const res = await apiFetch(`/api/admin/students/${studentId}`, { method: 'DELETE' });
       showToast(res.message);
       handleRouteChange();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  // ---------------- KHO MÃ VIP KHÔI PHỤC MẬT KHẨU (ADMIN) ----------------
+  async openVipCodesModal() {
+    try {
+      const data = await apiFetch('/api/admin/vip-codes');
+      const codes = data.codes || [];
+      const activeCount = codes.filter((c) => c.is_active).length;
+
+      showModal(`
+        <div class="space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+            <div>
+              <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>🔑</span> Kho Mã VIP Khôi phục Mật khẩu
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Độc quyền dành riêng cho Giáo viên. Cung cấp 1 mã cho học sinh khi các em quên mật khẩu để tự tạo mật khẩu mới.
+              </p>
+            </div>
+            <button
+              onclick="window.SpaceXApp.addMoreVipCodes(5)"
+              class="btn btn-secondary text-xs font-bold text-amber-700 border-amber-300 hover:bg-amber-50 whitespace-nowrap"
+            >
+              + Sinh thêm 5 mã VIP
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between text-xs text-slate-600 bg-amber-50 p-3 rounded-xl border border-amber-200">
+            <div>
+              Tổng số mã: <strong>${codes.length} mã</strong> • Đang hoạt động: <strong class="text-emerald-700">${activeCount} mã</strong>
+            </div>
+            <div class="text-[11px] text-amber-900">
+              💡 Bấm <strong>Sao chép</strong> để gửi nhanh mã cho học sinh qua Zalo/Facebook/SMS
+            </div>
+          </div>
+
+          <div class="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              ${codes
+                .map(
+                  (c, idx) => `
+                <div class="p-3 rounded-xl border ${
+                  c.is_active ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'
+                } flex flex-col justify-between gap-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-semibold text-slate-400">#${idx + 1}</span>
+                    <span class="font-mono text-sm font-extrabold ${
+                      c.is_active
+                        ? 'text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded'
+                        : 'text-slate-500 line-through'
+                    }">
+                      ${c.code}
+                    </span>
+                    <span class="badge ${c.is_active ? 'badge-success' : 'badge-danger'} text-[10px] px-1.5 py-0.5">
+                      ${c.is_active ? 'Sẵn sàng' : 'Tạm khóa'}
+                    </span>
+                  </div>
+
+                  <div class="text-[11px] text-slate-500 flex items-center justify-between">
+                    <span>
+                      Đã dùng: <strong>${c.use_count || 0} lần</strong>
+                      ${c.last_used_username ? `(@${c.last_used_username})` : ''}
+                    </span>
+                    ${
+                      c.last_used_at
+                        ? `<span class="text-[10px] text-slate-400">${c.last_used_at.slice(0, 16)}</span>`
+                        : ''
+                    }
+                  </div>
+
+                  <div class="flex items-center justify-end gap-1.5 pt-1.5 border-t border-slate-100">
+                    <button
+                      onclick="window.SpaceXApp.copyVipCode('${c.code}')"
+                      class="btn text-xs py-1 px-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold"
+                      title="Sao chép mã VIP để gửi cho học sinh"
+                    >
+                      📋 Sao chép mã
+                    </button>
+                    <button
+                      onclick="window.SpaceXApp.regenerateVipCode(${c.id})"
+                      class="btn text-xs py-1 px-2 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      title="Đổi sang mã mới nếu nghi ngờ mã bị lộ"
+                    >
+                      🔄 Đổi mã
+                    </button>
+                    <button
+                      onclick="window.SpaceXApp.toggleVipCodeActive(${c.id}, ${!c.is_active})"
+                      class="btn text-xs py-1 px-2 ${
+                        c.is_active
+                          ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      }"
+                      title="${c.is_active ? 'Tạm khóa mã này' : 'Mở khóa mã này'}"
+                    >
+                      ${c.is_active ? '🔒 Khóa' : '🔓 Mở'}
+                    </button>
+                  </div>
+                </div>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center pt-2 border-t border-slate-200">
+            <span class="text-xs text-slate-400">
+              Học sinh truy cập: <strong>#/forgot-password</strong>
+            </span>
+            <button type="button" onclick="window.SpaceXApp.closeModal()" class="btn btn-secondary text-xs font-bold">
+              Đóng lại
+            </button>
+          </div>
+        </div>
+      `);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  async copyVipCode(code) {
+    try {
+      await navigator.clipboard.writeText(code);
+      showToast(`Đã sao chép mã VIP: ${code}`);
+    } catch {
+      prompt('Mã VIP khôi phục mật khẩu:', code);
+    }
+  },
+
+  async regenerateVipCode(id) {
+    if (!confirm('Bạn có chắc chắn muốn đổi sang mã VIP mới không? Mã cũ sẽ lập tức hết hiệu lực.')) return;
+    try {
+      const res = await apiFetch(`/api/admin/vip-codes/${id}/regenerate`, { method: 'POST' });
+      showToast(res.message);
+      this.openVipCodesModal();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  async toggleVipCodeActive(id, newActive) {
+    try {
+      const res = await apiFetch(`/api/admin/vip-codes/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isActive: newActive }),
+      });
+      showToast(res.message);
+      this.openVipCodesModal();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  async addMoreVipCodes(count = 5) {
+    try {
+      const res = await apiFetch('/api/admin/vip-codes', {
+        method: 'POST',
+        body: JSON.stringify({ count }),
+      });
+      showToast(res.message);
+      this.openVipCodesModal();
     } catch (err) {
       showToast(err.message, 'error');
     }

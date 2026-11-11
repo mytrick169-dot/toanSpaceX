@@ -1,6 +1,7 @@
 import { getDb } from './database.mjs';
 import { hashPassword } from '../services/authService.mjs';
 import { ensureStorageDirs } from '../services/storageService.mjs';
+import { ensureVipCodes, DEFAULT_VIP_CODE_COUNT } from '../services/vipCodeService.mjs';
 
 /**
  * Toàn bộ Cấu trúc Chương trình Toán 12 (12 Chương / Chuyên đề lớn & 148 Phần / Tiết học)
@@ -418,6 +419,9 @@ export function ensureSeedData() {
   if (chCount < 12 || lessonCount < 180) {
     rebuildToan12Curriculum();
   }
+
+  // 3. Đảm bảo kho 20 mã VIP khôi phục mật khẩu cho học sinh đã được khởi tạo
+  ensureVipCodes(DEFAULT_VIP_CODE_COUNT);
 }
 
 /**

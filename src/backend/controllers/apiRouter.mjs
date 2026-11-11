@@ -36,6 +36,15 @@ import {
   getVnDateString,
   rebuildLeaderboardTables,
 } from '../services/activityAndLeaderboardService.mjs';
+import {
+  verifyVipCodeForStudent,
+  resetStudentPasswordWithVipCode,
+  listVipCodes,
+  addVipCodes,
+  regenerateVipCode,
+  updateVipCode,
+  deleteVipCode,
+} from '../services/vipCodeService.mjs';
 
 /**
  * Đọc JSON body từ HTTP Request (Hỗ trợ payload lớn lên tới 60MB cho upload PDF base64)
@@ -74,6 +83,17 @@ function sendJson(res, statusCode, data) {
     'Cache-Control': 'no-store',
   });
   res.end(body);
+}
+
+/**
+ * Lấy IP thực của client (hỗ trợ khi chạy sau proxy như Render / Cloudflare Tunnel)
+ */
+function getClientIp(req) {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) return String(cfIp).trim();
+  const fwd = req.headers['x-forwarded-for'];
+  if (fwd) return String(fwd).split(',')[0].trim();
+  return req.socket?.remoteAddress || 'unknown';
 }
 
 /**
@@ -148,6 +168,39 @@ export async function handleApiRequest(req, res, urlObj) {
     if (pathname === '/api/auth/me' && method === 'GET') {
       const user = requireAuth(req);
       return sendJson(res, 200, { user });
+    }
+
+    // Quên mật khẩu - Bước 1: Học sinh nhập Username + Mã VIP do Giáo viên cấp
+    if (pathname === '/api/auth/forgot-password/verify' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const { student } = verifyVipCodeForStudent({
+        username: body.username,
+        vipCode: body.vipCode,
+        ip: getClientIp(req),
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        username: student.username,
+        fullName: student.full_name,
+        message: 'Mã VIP hợp lệ! Hãy tạo mật khẩu mới cho tài khoản của bạn.',
+      });
+    }
+
+    // Quên mật khẩu - Bước 2: Tạo mật khẩu mới & đăng nhập luôn
+    if (pathname === '/api/auth/forgot-password/reset' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const reset = resetStudentPasswordWithVipCode({
+        username: body.username,
+        vipCode: body.vipCode,
+        newPassword: body.newPassword,
+        confirmPassword: body.confirmPassword,
+        ip: getClientIp(req),
+      });
+      const loginResult = loginUser(reset.username, reset.password);
+      return sendJson(res, 200, {
+        ...loginResult,
+        message: `Đã tạo mật khẩu mới thành công cho tài khoản @${reset.username}!`,
+      });
     }
 
     if (pathname === '/api/auth/password' && method === 'PUT') {
@@ -532,6 +585,49 @@ export async function handleApiRequest(req, res, urlObj) {
       return sendJson(res, 200, {
         message: 'Đã đặt lại mật khẩu tạm thời cho học sinh thành công!',
       });
+    }
+
+    // ------------------------------------------------------------------------
+    // KHO MÃ VIP KHÔI PHỤC MẬT KHẨU (/api/admin/vip-codes) - chỉ Giáo viên
+    // ------------------------------------------------------------------------
+    if (pathname === '/api/admin/vip-codes' && method === 'GET') {
+      requireAdmin(req);
+      return sendJson(res, 200, { codes: listVipCodes() });
+    }
+
+    if (pathname === '/api/admin/vip-codes' && method === 'POST') {
+      requireAdmin(req);
+      const body = await readJsonBody(req);
+      const created = addVipCodes(body.count || 1);
+      return sendJson(res, 201, {
+        created,
+        codes: listVipCodes(),
+        message: `Đã thêm ${created.length} mã VIP mới vào kho.`,
+      });
+    }
+
+    const vipRegenMatch = pathname.match(/^\/api\/admin\/vip-codes\/(\d+)\/regenerate$/);
+    if (vipRegenMatch && method === 'POST') {
+      requireAdmin(req);
+      const newCode = regenerateVipCode(Number(vipRegenMatch[1]));
+      return sendJson(res, 200, {
+        code: newCode,
+        codes: listVipCodes(),
+        message: `Đã đổi sang mã mới ${newCode}. Mã cũ đã hết hiệu lực.`,
+      });
+    }
+
+    const vipIdMatch = pathname.match(/^\/api\/admin\/vip-codes\/(\d+)$/);
+    if (vipIdMatch && (method === 'PUT' || method === 'DELETE')) {
+      requireAdmin(req);
+      const vipId = Number(vipIdMatch[1]);
+      if (method === 'PUT') {
+        const body = await readJsonBody(req);
+        updateVipCode(vipId, { isActive: body.isActive, note: body.note });
+        return sendJson(res, 200, { codes: listVipCodes(), message: 'Đã cập nhật mã VIP.' });
+      }
+      deleteVipCode(vipId);
+      return sendJson(res, 200, { codes: listVipCodes(), message: 'Đã xóa mã VIP khỏi kho.' });
     }
 
     // ========================================================================

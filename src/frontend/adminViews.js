@@ -215,9 +215,14 @@ export function renderAdminStudentsView(students = [], filters = {}) {
             Tạo tài khoản, tìm kiếm, xem lịch sử làm bài, khóa/mở khóa và cấp lại mật khẩu khi học sinh quên.
           </p>
         </div>
-        <button onclick="window.SpaceXApp.openCreateStudentModal()" class="btn btn-primary">
-          + Tạo tài khoản học sinh
-        </button>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="window.SpaceXApp.openVipCodesModal()" class="btn bg-amber-500 hover:bg-amber-600 text-white">
+            🔑 Kho Mã VIP khôi phục mật khẩu
+          </button>
+          <button onclick="window.SpaceXApp.openCreateStudentModal()" class="btn btn-primary">
+            + Tạo tài khoản học sinh
+          </button>
+        </div>
       </div>
 
       <!-- Thanh tìm kiếm & lọc -->

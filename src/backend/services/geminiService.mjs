@@ -880,7 +880,34 @@ export async function processPdfWithAiEngine({
         errorMessage: apiErr.message,
       });
 
-      // Nếu gọi Gemini API gặp lỗi và PDF là bản Scan ảnh JPEG, tự động dùng OCR chuyên dụng nội bộ
+      // 1. Thử phân tích PDF số hóa qua MuPDF trước (tốc độ siêu nhanh ~1s, bảo toàn 100% công thức LaTeX, bảng biến thiên & đồ thị)
+      try {
+        const digitalResult = await parseDigitalPdfWithMuPdf(pdfBuffer, fileName, pdfDocumentId || 'upload');
+        if (digitalResult && digitalResult.questions && digitalResult.questions.length > 0) {
+          const structured = validateAndNormalizeExtractedJson(
+            digitalResult,
+            fileName.replace(/\.pdf$/i, ''),
+            digitalResult.embeddedJpegs || []
+          );
+          return {
+            ...structured,
+            page_count: pdfInspection.pageCount,
+            ai_engine: {
+              mode: 'MUPDF_DIGITAL_MATH_PARSER',
+              model_requested: ENV.GEMINI_MODEL,
+              model_used: 'Bộ máy phân tích PDF Toán học Số hóa MuPDF (Tự động chuyển từ API)',
+              duration_ms: Date.now() - startTime,
+              notices: [
+                `Thông báo: Đã tự động phân tích ${structured.questions.length} câu hỏi bảo toàn phông chữ, bảng biến thiên và đồ thị.`,
+              ],
+            },
+          };
+        }
+      } catch (mupdfErr) {
+        console.warn('[MuPDF Fallback Warning]:', mupdfErr.message);
+      }
+
+      // 2. Nếu không có lớp chữ số hóa (PDF là bản Scan ảnh JPEG), dùng OCR chuyên dụng nội bộ
       if (pdfInspection.embeddedJpegs && pdfInspection.embeddedJpegs.length > 0) {
         try {
           const ocrResult = await extractScannedPdfWithLocalOcr(pdfInspection, fileName);
@@ -909,33 +936,6 @@ export async function processPdfWithAiEngine({
         }
       }
 
-      // Nếu gọi Gemini API gặp lỗi và là PDF số hóa: Dùng MuPDF
-      try {
-        const digitalResult = await parseDigitalPdfWithMuPdf(pdfBuffer, fileName, pdfDocumentId || 'upload');
-        if (digitalResult && digitalResult.questions && digitalResult.questions.length > 0) {
-          const structured = validateAndNormalizeExtractedJson(
-            digitalResult,
-            fileName.replace(/\.pdf$/i, ''),
-            digitalResult.embeddedJpegs || []
-          );
-          return {
-            ...structured,
-            page_count: pdfInspection.pageCount,
-            ai_engine: {
-              mode: 'MUPDF_DIGITAL_MATH_PARSER',
-              model_requested: ENV.GEMINI_MODEL,
-              model_used: 'Bộ máy phân tích PDF Toán học Số hóa MuPDF (Tự động chuyển từ API)',
-              duration_ms: Date.now() - startTime,
-              notices: [
-                `Thông báo: Đã tự động phân tích ${structured.questions.length} câu hỏi bảo toàn phông chữ, bảng biến thiên và đồ thị.`,
-              ],
-            },
-          };
-        }
-      } catch (mupdfErr) {
-        console.warn('[MuPDF Fallback Warning]:', mupdfErr.message);
-      }
-
       const fallbackStructured = parseMathPdfTextDirectly(pdfInspection, fileName, combinedText);
       if (fallbackStructured.questions.length > 0) {
         return {
@@ -958,7 +958,48 @@ export async function processPdfWithAiEngine({
   }
 
   // Trường hợp chưa cấu hình GEMINI_API_KEY trong .env:
-  // 1. Nếu là PDF scan ảnh chụp, chạy trực tiếp bộ máy OCR nội bộ tốc độ cao:
+  // 1. Nếu là PDF số hóa (Word / MathType / LaTeX export): Dùng MuPDF trước (siêu tốc ~1s, giữ nguyên 100% công thức, font, bảng biến thiên & đồ thị)
+  try {
+    const digitalResult = await parseDigitalPdfWithMuPdf(pdfBuffer, fileName, pdfDocumentId || 'upload');
+    if (digitalResult && digitalResult.questions && digitalResult.questions.length > 0) {
+      const structured = validateAndNormalizeExtractedJson(
+        digitalResult,
+        fileName.replace(/\.pdf$/i, ''),
+        digitalResult.embeddedJpegs || []
+      );
+      const durationMs = Date.now() - startTime;
+      logAiProcessing({
+        pdfDocumentId,
+        fileName,
+        fileSize: pdfBuffer.length,
+        modelRequested: ENV.GEMINI_MODEL,
+        modelUsed: 'MUPDF_DIGITAL_MATH_PARSER',
+        uploadMethod: 'mupdf_vector_stream',
+        retryCount: 0,
+        durationMs,
+        questionsCount: structured.questions.length,
+        needsReviewCount: structured.needs_review_count,
+        status: structured.needs_review_count > 0 ? 'NEEDS_REVIEW' : 'COMPLETED',
+      });
+      return {
+        ...structured,
+        page_count: pdfInspection.pageCount,
+        ai_engine: {
+          mode: 'MUPDF_DIGITAL_MATH_PARSER',
+          model_requested: ENV.GEMINI_MODEL,
+          model_used: 'Bộ máy phân tích PDF Toán học Số hóa MuPDF',
+          duration_ms: durationMs,
+          notices: [
+            `Đã tự động trích xuất ${structured.questions.length} câu hỏi chuẩn xác, bảo toàn 100% phông chữ, bảng biến thiên và đồ thị.`,
+          ],
+        },
+      };
+    }
+  } catch (mupdfErr) {
+    console.warn('[MuPDF Digital Parser Warning]:', mupdfErr.message);
+  }
+
+  // 2. Nếu không tìm thấy câu hỏi dạng số hóa (PDF là bản Scan ảnh thuần túy), dùng OCR nội bộ:
   if (pdfInspection.embeddedJpegs && pdfInspection.embeddedJpegs.length > 0) {
     try {
       const ocrResult = await extractScannedPdfWithLocalOcr(pdfInspection, fileName);
@@ -999,47 +1040,6 @@ export async function processPdfWithAiEngine({
     } catch (ocrErr) {
       console.warn('[Scanned PDF OCR Error]:', ocrErr.message);
     }
-  }
-
-  // 2. Nếu là PDF số hóa (Word / MathType / LaTeX export): Dùng MuPDF để phân tích cấu trúc, giữ nguyên hình vẽ & công thức Toán
-  try {
-    const digitalResult = await parseDigitalPdfWithMuPdf(pdfBuffer, fileName, pdfDocumentId || 'upload');
-    if (digitalResult && digitalResult.questions && digitalResult.questions.length > 0) {
-      const structured = validateAndNormalizeExtractedJson(
-        digitalResult,
-        fileName.replace(/\.pdf$/i, ''),
-        digitalResult.embeddedJpegs || []
-      );
-      const durationMs = Date.now() - startTime;
-      logAiProcessing({
-        pdfDocumentId,
-        fileName,
-        fileSize: pdfBuffer.length,
-        modelRequested: ENV.GEMINI_MODEL,
-        modelUsed: 'MUPDF_DIGITAL_MATH_PARSER',
-        uploadMethod: 'mupdf_vector_stream',
-        retryCount: 0,
-        durationMs,
-        questionsCount: structured.questions.length,
-        needsReviewCount: structured.needs_review_count,
-        status: structured.needs_review_count > 0 ? 'NEEDS_REVIEW' : 'COMPLETED',
-      });
-      return {
-        ...structured,
-        page_count: pdfInspection.pageCount,
-        ai_engine: {
-          mode: 'MUPDF_DIGITAL_MATH_PARSER',
-          model_requested: ENV.GEMINI_MODEL,
-          model_used: 'Bộ máy phân tích PDF Toán học Số hóa MuPDF',
-          duration_ms: durationMs,
-          notices: [
-            `Đã tự động trích xuất ${structured.questions.length} câu hỏi chuẩn xác, bảo toàn 100% phông chữ, bảng biến thiên và đồ thị.`,
-          ],
-        },
-      };
-    }
-  } catch (mupdfErr) {
-    console.warn('[MuPDF Digital Parser Warning]:', mupdfErr.message);
   }
 
   const directStructured = parseMathPdfTextDirectly(pdfInspection, fileName, combinedText);
