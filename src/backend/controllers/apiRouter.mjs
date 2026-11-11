@@ -1071,6 +1071,34 @@ export async function handleApiRequest(req, res, urlObj) {
       return sendJson(res, 200, { exams });
     }
 
+    if (pathname === '/api/admin/exams' && method === 'POST') {
+      const admin = requireAdmin(req);
+      const b = await readJsonBody(req);
+      const examIns = db.prepare(`
+        INSERT INTO exams (
+          title, description, exam_type, subject_id, chapter_id, lesson_id,
+          default_duration_minutes, allow_unlimited_time, allow_review,
+          total_points, status, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 10, 'PUBLISHED', ?)
+      `).run(
+        b.title || 'Đề thi mới',
+        b.description || '',
+        b.examType || 'EXAM',
+        b.subjectId ? Number(b.subjectId) : null,
+        b.chapterId ? Number(b.chapterId) : null,
+        b.lessonId ? Number(b.lessonId) : null,
+        Number(b.defaultDurationMinutes || 45),
+        b.allowUnlimitedTime !== false ? 1 : 0,
+        b.allowReview !== false ? 1 : 0,
+        admin.id
+      );
+      const newExamId = Number(examIns.lastInsertRowid);
+      return sendJson(res, 201, {
+        message: 'Đã tạo đề thi thành công.',
+        exam: getExamFullDetailForAdmin(newExamId)
+      });
+    }
+
     const adminExamMatch = pathname.match(/^\/api\/admin\/exams\/(\d+)$/);
     if (adminExamMatch) {
       requireAdmin(req);

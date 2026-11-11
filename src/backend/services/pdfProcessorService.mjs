@@ -50,18 +50,10 @@ export function extractEmbeddedJpegsFromPdfBuffer(buffer, pdfId = 'temp') {
       const jpgBuf = buffer.subarray(idx, endIdx + 2);
       if (jpgBuf.length > 10000) {
         pageIdx++;
-        const fileName = `pdf_${pdfId}_page_${pageIdx}.jpg`;
-        const fullPath = path.join(ENV.STORAGE_PATH, 'figures', fileName);
-        try {
-          fs.writeFileSync(fullPath, jpgBuf);
-        } catch {
-          // ignore write error
-        }
+        // Không lưu file JPEG trang vào đĩa cứng cục bộ để tránh tốn dung lượng bộ nhớ của người dùng
         jpegs.push({
           page: pageIdx,
-          fileName,
-          filePath: fullPath,
-          url: `/api/storage/figures/${fileName}`,
+          fileName: `pdf_${pdfId}_page_${pageIdx}.jpg`,
           byteLength: jpgBuf.length,
         });
       }

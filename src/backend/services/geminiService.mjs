@@ -318,7 +318,7 @@ async function callGeminiWithRetry({ pdfBuffer, fileName, extractedText, pageIma
   const primaryModel = ENV.GEMINI_MODEL;
   const fallbackModel = ENV.GEMINI_FALLBACK_MODEL;
   const modelsToTry = Array.from(
-    new Set([primaryModel, fallbackModel, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-pro'].filter(Boolean))
+    new Set([primaryModel, fallbackModel, 'gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-flash-latest'].filter(Boolean))
   );
 
   let uploadMethod = 'inline_data';
@@ -907,33 +907,10 @@ export async function processPdfWithAiEngine({
         console.warn('[MuPDF Fallback Warning]:', mupdfErr.message);
       }
 
-      // 2. Nếu không có lớp chữ số hóa (PDF là bản Scan ảnh JPEG), dùng OCR chuyên dụng nội bộ
-      if (pdfInspection.embeddedJpegs && pdfInspection.embeddedJpegs.length > 0) {
-        try {
-          const ocrResult = await extractScannedPdfWithLocalOcr(pdfInspection, fileName);
-          if (ocrResult && ocrResult.questions && ocrResult.questions.length > 0) {
-            const structured = validateAndNormalizeExtractedJson(
-              ocrResult,
-              fileName.replace(/\.pdf$/i, ''),
-              pdfInspection.embeddedJpegs || []
-            );
-            return {
-              ...structured,
-              page_count: pdfInspection.pageCount,
-              ai_engine: {
-                mode: 'LOCAL_SCANNED_PDF_OCR_ENGINE',
-                model_requested: ENV.GEMINI_MODEL,
-                model_used: 'Bộ máy OCR & Phân tích cấu trúc Đề thi Scan (Tự động chuyển từ API)',
-                duration_ms: Date.now() - startTime,
-                notices: [
-                  `Thông báo: Đã tự động nhận diện ${structured.questions.length} câu hỏi từ ảnh scan (Trắc nghiệm, Đúng/Sai, Trả lời ngắn) và đối chiếu Bảng đáp án thành công.`,
-                ],
-              },
-            };
-          }
-        } catch (ocrErr) {
-          console.warn('[Scanned PDF OCR Fallback Warning]:', ocrErr.message);
-        }
+      // Không chạy quét OCR ảnh nội bộ (Tesseract) vì làm méo mó công thức toán, cắt ảnh vụn và gây treo máy lâu.
+      const isQuotaError = /429|quota|RESOURCE_EXHAUSTED/i.test(apiErr.message);
+      if (isQuotaError) {
+        throw new Error('Gemini API đã dùng hết hạn mức miễn phí 20 lượt gọi/ngày (Google AI Studio Free Tier). Vui lòng thử lại vào ngày mai hoặc nâng cấp API Key sang gói có trả phí (Pay-as-you-go).');
       }
 
       const fallbackStructured = parseMathPdfTextDirectly(pdfInspection, fileName, combinedText);
