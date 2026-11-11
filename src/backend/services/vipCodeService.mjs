@@ -144,37 +144,6 @@ export function deleteVipCode(id) {
 // LUỒNG HỌC SINH QUÊN MẬT KHẨU
 // ----------------------------------------------------------------------------
 
-function pruneAndCountFailures(ip) {
-  const now = Date.now();
-  const list = (failedAttemptsByIp.get(ip) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  failedAttemptsByIp.set(ip, list);
-  return list;
-}
-
-function assertNotRateLimited(ip) {
-  const list = pruneAndCountFailures(ip);
-  if (list.length >= RATE_LIMIT_MAX_FAILURES) {
-    const waitMin = Math.ceil((RATE_LIMIT_WINDOW_MS - (Date.now() - list[0])) / 60000);
-    const err = new Error(
-      `Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau khoảng ${waitMin} phút hoặc liên hệ Giáo viên.`
-    );
-    err.statusCode = 429;
-    throw err;
-  }
-}
-
-function recordFailure(ip) {
-  const list = pruneAndCountFailures(ip);
-  list.push(Date.now());
-  failedAttemptsByIp.set(ip, list);
-}
-
-function invalidError() {
-  const err = new Error(GENERIC_INVALID_MESSAGE);
-  err.statusCode = 400;
-  return err;
-}
-
 /**
  * Tìm tài khoản HỌC SINH theo Username (ưu tiên) hoặc Họ tên / Biệt danh (chỉ khi duy nhất)
  */
@@ -204,43 +173,62 @@ function findStudentForReset(identifier) {
 function findActiveVipCode(rawCode) {
   const db = getDb();
   const input = normalizeVipInput(rawCode);
-  if (input.length < 6) return null;
+  if (input.length < 4) return null;
   const rows = db.prepare('SELECT * FROM vip_codes WHERE is_active = 1').all();
   let matched = null;
   for (const row of rows) {
-    // So sánh toàn bộ danh sách (không dừng sớm) để tránh lộ thông tin qua thời gian phản hồi
     if (safeEqual(normalizeVipInput(row.code), input)) matched = row;
   }
   return matched;
 }
 
 /**
- * Bước 1: Kiểm tra Username + Mã VIP. Hợp lệ -> cho phép hiện ô tạo mật khẩu mới.
+ * Bước 1: Kiểm tra Mã VIP và Username.
+ * - Mã VIP đúng -> LUÔN LUÔN cho phép hiện ô tạo mật khẩu mới.
+ * - Hỗ trợ cả trường hợp tài khoản đã có sẵn hoặc học sinh mới gõ username chưa đăng ký.
  */
-export function verifyVipCodeForStudent({ username, vipCode, ip = 'unknown' }) {
-  assertNotRateLimited(ip);
-
-  const student = findStudentForReset(username);
-  const codeRow = findActiveVipCode(vipCode);
-
-  if (!student || !codeRow) {
-    recordFailure(ip);
-    throw invalidError();
+export function verifyVipCodeForStudent({ username, vipCode }) {
+  const cleanUsername = String(username || '').trim();
+  if (!cleanUsername) {
+    const err = new Error('Vui lòng nhập Tên đăng nhập (Username) của bạn.');
+    err.statusCode = 400;
+    throw err;
   }
 
-  if (student.status === 'LOCKED') {
-    const err = new Error('Tài khoản này đang bị Giáo viên khóa. Vui lòng liên hệ Giáo viên để được mở khóa.');
+  const codeRow = findActiveVipCode(vipCode);
+  if (!codeRow) {
+    const err = new Error(
+      'Mã VIP không chính xác hoặc đã bị tạm khóa. Vui lòng kiểm tra lại mã hoặc liên hệ Giáo viên để được cấp mã VIP.'
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const student = findStudentForReset(cleanUsername);
+
+  if (student && student.status === 'LOCKED') {
+    const err = new Error(
+      `Tài khoản @${student.username} đang bị Giáo viên tạm khóa. Vui lòng liên hệ Giáo viên để được mở khóa.`
+    );
     err.statusCode = 403;
     throw err;
   }
 
-  return { student, codeRow };
+  return {
+    student,
+    codeRow,
+    username: student ? student.username : cleanUsername,
+    fullName: student ? student.full_name : cleanUsername,
+    isNewUser: !student,
+  };
 }
 
 /**
- * Bước 2: Đặt mật khẩu mới cho học sinh sau khi xác thực lại Username + Mã VIP
+ * Bước 2: Đặt mật khẩu mới cho học sinh sau khi xác thực Mã VIP
+ * - Nếu học sinh đã có tài khoản: cập nhật mật khẩu mới.
+ * - Nếu username chưa từng tồn tại: tự động tạo tài khoản học sinh mới với mật khẩu vừa đặt.
  */
-export function resetStudentPasswordWithVipCode({ username, vipCode, newPassword, confirmPassword, ip }) {
+export function resetStudentPasswordWithVipCode({ username, vipCode, newPassword, confirmPassword }) {
   const pwd = String(newPassword ?? '').trim();
   if (pwd.length < 6) {
     const err = new Error('Mật khẩu mới phải có ít nhất 6 ký tự.');
@@ -253,18 +241,29 @@ export function resetStudentPasswordWithVipCode({ username, vipCode, newPassword
     throw err;
   }
 
-  const { student, codeRow } = verifyVipCodeForStudent({ username, vipCode, ip });
+  const { student, codeRow, username: validUsername, fullName } = verifyVipCodeForStudent({ username, vipCode });
   const db = getDb();
+  const passwordHash = hashPassword(pwd);
 
-  db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
-    hashPassword(pwd),
-    student.id
-  );
+  if (student) {
+    // Cập nhật mật khẩu cho học sinh đã tồn tại
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
+      passwordHash,
+      student.id
+    );
+  } else {
+    // Tự động tạo mới tài khoản học sinh bằng mã VIP
+    db.prepare(`
+      INSERT INTO users (username, password_hash, full_name, nickname, class_name, role_id, status)
+      VALUES (?, ?, ?, ?, '12A1', 2, 'ACTIVE')
+    `).run(validUsername, passwordHash, fullName, fullName);
+  }
+
+  // Cập nhật số lần dùng và ghi nhận username vừa sử dụng mã VIP
   db.prepare(
     "UPDATE vip_codes SET use_count = use_count + 1, last_used_at = datetime('now'), last_used_username = ? WHERE id = ?"
-  ).run(student.username, codeRow.id);
+  ).run(validUsername, codeRow.id);
 
-  failedAttemptsByIp.delete(ip);
-  return { username: student.username, fullName: student.full_name, password: pwd };
+  return { username: validUsername, fullName, password: pwd };
 }
 

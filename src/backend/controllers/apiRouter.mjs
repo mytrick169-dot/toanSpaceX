@@ -173,15 +173,15 @@ export async function handleApiRequest(req, res, urlObj) {
     // Quên mật khẩu - Bước 1: Học sinh nhập Username + Mã VIP do Giáo viên cấp
     if (pathname === '/api/auth/forgot-password/verify' && method === 'POST') {
       const body = await readJsonBody(req);
-      const { student } = verifyVipCodeForStudent({
+      const resData = verifyVipCodeForStudent({
         username: body.username,
         vipCode: body.vipCode,
-        ip: getClientIp(req),
       });
       return sendJson(res, 200, {
         ok: true,
-        username: student.username,
-        fullName: student.full_name,
+        username: resData.username,
+        fullName: resData.fullName,
+        isNewUser: resData.isNewUser,
         message: 'Mã VIP hợp lệ! Hãy tạo mật khẩu mới cho tài khoản của bạn.',
       });
     }
@@ -194,7 +194,6 @@ export async function handleApiRequest(req, res, urlObj) {
         vipCode: body.vipCode,
         newPassword: body.newPassword,
         confirmPassword: body.confirmPassword,
-        ip: getClientIp(req),
       });
       const loginResult = loginUser(reset.username, reset.password);
       return sendJson(res, 200, {
