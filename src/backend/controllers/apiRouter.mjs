@@ -983,6 +983,28 @@ export async function handleApiRequest(req, res, urlObj) {
       const examTitle = body.title || parsed.exam_title || fileName.replace(/\.pdf$/i, '') || 'Đề thi mới';
       const normalized = validateAndNormalizeExtractedJson(parsed, examTitle);
 
+      // Lưu hình ảnh cắt từ client nếu có
+      if (Array.isArray(body.croppedFigures) && body.croppedFigures.length > 0) {
+        for (const fig of body.croppedFigures) {
+          if (fig.questionNumber && fig.dataUrl) {
+            const storedUrl = saveFigureDataUrl(fig.dataUrl, `pdf_${pdfDocId || 'import'}_q${fig.questionNumber}`);
+            const targetQ = normalized.questions.find((q) => q.question_number === Number(fig.questionNumber));
+            if (targetQ) {
+              targetQ.image_url = storedUrl;
+              targetQ.imageUrl = storedUrl;
+              targetQ.images = [
+                ...(targetQ.images || []),
+                {
+                  page: fig.page || 1,
+                  image_url: storedUrl,
+                  caption: fig.caption || `Hình vẽ Câu ${fig.questionNumber}`,
+                },
+              ];
+            }
+          }
+        }
+      }
+
       const createdExam = createExamFromAiExtraction({
         title: examTitle,
         description:

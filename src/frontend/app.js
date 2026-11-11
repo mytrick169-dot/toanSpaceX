@@ -2287,6 +2287,14 @@ Hãy đọc kỹ file PDF đề thi đính kèm và trích xuất TOÀN BỘ câ
       "question_number": 1,
       "question_type": "multiple_choice",
       "content": "Nội dung câu hỏi, toàn bộ công thức toán viết dạng LaTeX kẹp giữa $...$ hoặc $$...$$",
+      "images": [
+        {
+          "page": 1,
+          "bbox": [150, 600, 350, 950],
+          "caption": "Mô tả hình vẽ hoặc đồ thị"
+        }
+      ],
+      "svg_diagram": "<svg viewBox=\\"0 0 300 200\\">...</svg>",
       "options": {
         "A": "Phương án A",
         "B": "Phương án B",
@@ -2322,7 +2330,10 @@ Hãy đọc kỹ file PDF đề thi đính kèm và trích xuất TOÀN BỘ câ
 Quy tắc bắt buộc:
 1. Đối chiếu Bảng đáp án ở các trang cuối file PDF để điền chính xác "correct_answer" hoặc "correct: true/false" cho từng câu.
 2. Công thức toán học bắt buộc viết dạng LaTeX ($...$).
-3. Không bỏ sót bất kỳ câu hỏi nào trong đề.`;
+3. Với câu hỏi CÓ HÌNH VẼ, ĐỒ THỊ, BẢNG BIẾN THIÊN:
+   - Bắt buộc ghi nhận vào mảng "images" với số trang "page" (bắt đầu từ 1) và tọa độ hộp cắt "bbox": [ymin, xmin, ymax, xmax] (thang điểm 0..1000 bao quanh hình vẽ đó).
+   - Nếu có thể, tạo thêm mã vector "svg_diagram" (ví dụ đồ thị, bảng biến thiên, hình không gian) để hiển thị trực tiếp.
+4. Không bỏ sót bất kỳ câu hỏi nào trong đề.`;
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(promptText).then(() => {
@@ -2345,12 +2356,72 @@ Quy tắc bắt buộc:
     const btn = document.getElementById('btn-start-import-json');
     if (btn) {
       btn.disabled = true;
-      btn.textContent = '⏳ Đang xử lý & Tạo đề thi từ Gemini Web...';
+      btn.textContent = '⏳ Đang phân tích JSON & Tự động cắt hình vẽ từ PDF...';
     }
 
     try {
+      let parsed;
+      try {
+        let cleaned = jsonContent.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch (parseErr) {
+        throw new Error('Nội dung JSON không đúng định dạng: ' + parseErr.message);
+      }
+
+      // Tự động cắt hình ảnh từ PDF bằng tọa độ bbox (nếu có PDF và bbox)
+      const croppedFigures = [];
+      if (window.pdfjsLib && AppState.selectedPdfBase64) {
+        try {
+          const rawBase64 = AppState.selectedPdfBase64.replace(/^data:application\/pdf;base64,/, '');
+          const binaryString = atob(rawBase64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const pdfDoc = await window.pdfjsLib.getDocument({ data: bytes.buffer }).promise;
+          const questionsList = Array.isArray(parsed.questions) ? parsed.questions : [];
+
+          for (const q of questionsList) {
+            const imgInfo = q.images?.[0];
+            if (imgInfo && Array.isArray(imgInfo.bbox) && imgInfo.bbox.length === 4) {
+              const pageNum = Math.min(Math.max(1, Number(imgInfo.page || 1)), pdfDoc.numPages);
+              const page = await pdfDoc.getPage(pageNum);
+              const viewport = page.getViewport({ scale: 2.0 });
+              const canvas = document.createElement('canvas');
+              canvas.width = viewport.width;
+              canvas.height = viewport.height;
+              const ctx = canvas.getContext('2d');
+              await page.render({ canvasContext: ctx, viewport }).promise;
+
+              const [ymin, xmin, ymax, xmax] = imgInfo.bbox;
+              const cropX = Math.max(0, (xmin / 1000) * canvas.width);
+              const cropY = Math.max(0, (ymin / 1000) * canvas.height);
+              const cropW = Math.min(canvas.width - cropX, ((xmax - xmin) / 1000) * canvas.width);
+              const cropH = Math.min(canvas.height - cropY, ((ymax - ymin) / 1000) * canvas.height);
+
+              if (cropW > 10 && cropH > 10) {
+                const subCanvas = document.createElement('canvas');
+                subCanvas.width = cropW;
+                subCanvas.height = cropH;
+                const subCtx = subCanvas.getContext('2d');
+                subCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                croppedFigures.push({
+                  questionNumber: q.question_number,
+                  page: pageNum,
+                  dataUrl: subCanvas.toDataURL('image/jpeg', 0.92),
+                  caption: imgInfo.caption || `Hình vẽ Câu ${q.question_number}`
+                });
+              }
+            }
+          }
+        } catch (cropErr) {
+          console.warn('[Auto Crop Warning]:', cropErr);
+        }
+      }
+
       const payload = {
         jsonContent,
+        croppedFigures,
         pdfBase64: AppState.selectedPdfBase64 || null,
         fileName: AppState.selectedPdfName || 'De_Thi_Toan.pdf',
         title: document.getElementById('upload-exam-title')?.value || '',
