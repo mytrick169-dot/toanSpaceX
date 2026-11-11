@@ -11,7 +11,7 @@ COPY start-public.mjs ./
 COPY vie.traineddata ./
 COPY database ./database
 COPY src ./src
-COPY storage ./storage
+RUN mkdir -p storage/figures storage/pdfs data
 COPY data ./data
 
 ENV NODE_ENV=production
