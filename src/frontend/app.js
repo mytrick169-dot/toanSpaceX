@@ -2393,6 +2393,30 @@ window.SpaceXApp = {
       showToast(err.message, 'error');
     }
   },
+
+  async saveGeminiAiConfig(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    try {
+      const apiKeyInput = document.getElementById('ai-cfg-api-key');
+      const modelSelect = document.getElementById('ai-cfg-model');
+      const geminiApiKey = apiKeyInput?.value?.trim();
+      const geminiModel = modelSelect?.value;
+
+      showToast('Đang kết nối và lưu cấu hình Gemini AI...');
+      const body = { geminiModel };
+      if (geminiApiKey) {
+        body.geminiApiKey = geminiApiKey;
+      }
+      const res = await apiFetch('/api/admin/ai/config', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      showToast(res.message || 'Đã kích hoạt Google Gemini AI thành công!');
+      handleRouteChange();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
 };
 
 window.addEventListener('hashchange', handleRouteChange);

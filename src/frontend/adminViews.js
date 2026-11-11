@@ -1284,6 +1284,57 @@ export function renderAdminStatisticsView(statsData, lbData, aiStatus) {
         </p>
       </div>
 
+      <!-- Cấu hình Gemini AI Engine (Bắt buộc để đọc đề Scan & LaTeX chuẩn xác) -->
+      <div class="card p-6 border-2 ${aiStatus?.isConfigured ? 'border-emerald-300 bg-emerald-50/20' : 'border-amber-300 bg-amber-50/30'}">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-slate-900">🤖 Cấu hình Google Gemini AI Engine (Đọc Đề Scan & Công thức LaTeX)</h3>
+              ${
+                aiStatus?.isConfigured
+                  ? '<span class="badge badge-success">✓ Đã kích hoạt API Key</span>'
+                  : '<span class="badge badge-danger">⚠️ Chưa có API Key (Đang chạy OCR thường nên bị sai phông chữ toán)</span>'
+              }
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              File PDF Scan/ảnh chụp trang cần Gemini AI Vision để nhận diện chuẩn xác 100% công thức toán học LaTeX, đồ thị và bảng biến thiên.
+            </p>
+          </div>
+          <div class="text-xs text-slate-600 font-mono">
+            Model đang dùng: <span class="font-bold text-blue-700">${aiStatus?.configuredModel || 'gemini-2.5-pro'}</span>
+          </div>
+        </div>
+
+        <form onsubmit="window.SpaceXApp.saveGeminiAiConfig(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Google Gemini API Key (Bắt đầu bằng <code>AIzaSy...</code>)
+            </label>
+            <input
+              id="ai-cfg-api-key"
+              type="password"
+              placeholder="${aiStatus?.maskedApiKey ? `Đang dùng: ${aiStatus.maskedApiKey} (Nhập mã mới nếu muốn đổi)` : 'Dán Gemini API Key của bạn vào đây (AIzaSy...)'}"
+              class="input text-sm"
+            />
+            <div class="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+              <span>Lấy API Key hoàn toàn miễn phí tại <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 font-bold underline">Google AI Studio</a>.</span>
+              ${aiStatus?.isConfigured ? '<span class="text-emerald-700 font-semibold">✓ Hệ thống đã sẵn sàng</span>' : '<span class="text-amber-700 font-bold">⚠️ Vui lòng nhập API Key để tránh lỗi phông</span>'}
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Phiên bản Model AI</label>
+            <select id="ai-cfg-model" class="input text-sm">
+              <option value="gemini-2.5-pro" ${aiStatus?.configuredModel === 'gemini-2.5-pro' ? 'selected' : ''}>gemini-2.5-pro (Chuẩn xác nhất cho Toán học THPT)</option>
+              <option value="gemini-2.5-flash" ${aiStatus?.configuredModel === 'gemini-2.5-flash' ? 'selected' : ''}>gemini-2.5-flash (Tốc độ cao nhất)</option>
+              <option value="gemini-3.1-pro-preview" ${aiStatus?.configuredModel === 'gemini-3.1-pro-preview' ? 'selected' : ''}>gemini-3.1-pro-preview (Bản thử nghiệm cao cấp)</option>
+            </select>
+            <button type="submit" class="btn btn-primary text-xs w-full py-2.5 mt-2.5 font-bold">
+              💾 Lưu & Kích hoạt Gemini AI
+            </button>
+          </div>
+        </form>
+      </div>
+
       <!-- Cấu hình Bảng xếp hạng (Leaderboard Controls) -->
       <div class="card p-6">
         <div class="flex flex-wrap items-center justify-between gap-4">
