@@ -190,15 +190,86 @@ export function insertQuestionsForExam(examId, questions = []) {
   recalculateExamTotalPoints(examId);
 }
 
+/**
+ * Tự động phân bổ lại điểm số cho toàn bộ câu hỏi trong đề thi sao cho:
+ * 1. Tổng điểm của đề luôn luôn là 10.00 điểm tuyệt đối.
+ * 2. Tỉ lệ trọng số câu hỏi theo chuẩn Bộ GD&ĐT (thích ứng linh hoạt với mọi dạng đề):
+ *    - Trắc nghiệm 4 lựa chọn (MULTIPLE_CHOICE): trọng số 1
+ *    - Trả lời ngắn (SHORT_ANSWER): trọng số 2 (gấp đôi trắc nghiệm)
+ *    - Đúng / Sai (TRUE_FALSE): trọng số 4 (1 câu trọn vẹn gồm 4 ý a, b, c, d)
+ * 3. Nếu đề chỉ có 1 dạng (ví dụ chỉ có trắc nghiệm): Điểm 1 câu = 10 / tổng số câu.
+ * 4. Dùng thuật toán Largest Remainder (Hamilton-Hare) để phân bổ phần dư làm tròn,
+ *    đảm bảo không bao giờ bị lệch tổng 10.00 và các câu cùng dạng chỉ lệch tối đa 0.01 điểm.
+ */
 export function recalculateExamTotalPoints(examId) {
   const db = getDb();
-  const sumRow = db
-    .prepare('SELECT COALESCE(ROUND(SUM(points), 2), 0) as total FROM questions WHERE exam_id = ?')
-    .get(examId);
-  db.prepare("UPDATE exams SET total_points = ?, updated_at = datetime('now') WHERE id = ?").run(
-    sumRow.total > 0 ? sumRow.total : 10,
-    examId
-  );
+  const questions = db
+    .prepare('SELECT id, question_type FROM questions WHERE exam_id = ? ORDER BY order_index ASC, id ASC')
+    .all(examId);
+
+  if (!questions || questions.length === 0) {
+    db.prepare("UPDATE exams SET total_points = 10, updated_at = datetime('now') WHERE id = ?").run(examId);
+    return;
+  }
+
+  let nMcq = 0;
+  let nTf = 0;
+  let nSa = 0;
+
+  for (const q of questions) {
+    const rawType = String(q.question_type || 'MULTIPLE_CHOICE').toUpperCase();
+    if (rawType.includes('TRUE_FALSE') || rawType === 'TF') nTf++;
+    else if (rawType.includes('SHORT') || rawType === 'SA') nSa++;
+    else nMcq++;
+  }
+
+  const totalWeight = nMcq * 1 + nTf * 4 + nSa * 2;
+  if (totalWeight === 0) return;
+
+  const TOTAL_CENTS = 1000; // 10.00 điểm quy về cents
+  let assignedCents = 0;
+
+  const items = questions.map((q) => {
+    const rawType = String(q.question_type || 'MULTIPLE_CHOICE').toUpperCase();
+    let w = 1;
+    if (rawType.includes('TRUE_FALSE') || rawType === 'TF') w = 4;
+    else if (rawType.includes('SHORT') || rawType === 'SA') w = 2;
+
+    const rawVal = (w * TOTAL_CENTS) / totalWeight;
+    const floorVal = Math.floor(rawVal);
+    const rem = rawVal - floorVal;
+    assignedCents += floorVal;
+    return { id: q.id, w, floorVal, rem, cents: floorVal };
+  });
+
+  const missingCents = TOTAL_CENTS - assignedCents;
+  if (missingCents > 0) {
+    const sortedIndices = items
+      .map((it, idx) => ({ idx, rem: it.rem }))
+      .sort((a, b) => b.rem - a.rem);
+
+    for (let i = 0; i < missingCents; i++) {
+      const targetIdx = sortedIndices[i % sortedIndices.length].idx;
+      items[targetIdx].cents += 1;
+    }
+  }
+
+  const updateQ = db.prepare('UPDATE questions SET points = ? WHERE id = ?');
+  for (const it of items) {
+    const finalPts = Number((it.cents / 100).toFixed(2));
+    updateQ.run(finalPts, it.id);
+  }
+
+  db.prepare("UPDATE exams SET total_points = 10, updated_at = datetime('now') WHERE id = ?").run(examId);
+}
+
+export function recalculateAllExamsPointsTo10() {
+  const db = getDb();
+  const exams = db.prepare('SELECT id FROM exams').all();
+  for (const ex of exams) {
+    recalculateExamTotalPoints(ex.id);
+  }
+  return exams.length;
 }
 
 /**

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { ENV } from './src/backend/config/env.mjs';
 import { getDb } from './src/backend/db/database.mjs';
 import { ensureSeedData } from './src/backend/db/seed.mjs';
+import { recalculateAllExamsPointsTo10 } from './src/backend/services/examService.mjs';
 import { handleApiRequest } from './src/backend/controllers/apiRouter.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,6 +15,11 @@ const FRONTEND_DIR = path.join(__dirname, 'src', 'frontend');
 // Khởi tạo Database & Dữ liệu mẫu thực tế khi khởi động Server
 getDb();
 ensureSeedData();
+try {
+  recalculateAllExamsPointsTo10();
+} catch (e) {
+  console.warn('[Points Rebalance Warning]:', e.message);
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',

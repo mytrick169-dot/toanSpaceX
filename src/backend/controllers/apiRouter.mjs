@@ -27,6 +27,7 @@ import {
   insertQuestionsForExam,
   getExamFullDetailForAdmin,
   recalculateExamTotalPoints,
+  recalculateAllExamsPointsTo10,
   startOrResumeExamAttempt,
   getActiveAttemptPayloadForStudent,
   saveStudentAnswerDraft,
@@ -1165,6 +1166,14 @@ export async function handleApiRequest(req, res, urlObj) {
         .all();
 
       return sendJson(res, 200, { exams });
+    }
+
+    if (pathname === '/api/admin/exams/rebalance-all-points' && method === 'POST') {
+      requireAdmin(req);
+      const count = recalculateAllExamsPointsTo10();
+      return sendJson(res, 200, {
+        message: `Đã phân bổ lại điểm số cho toàn bộ ${count} đề thi về đúng thang điểm 10.0 chuẩn!`
+      });
     }
 
     if (pathname === '/api/admin/exams' && method === 'POST') {
