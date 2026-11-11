@@ -4,4 +4,8 @@ node_modules/
 .DS_Store
 *.db-shm
 *.db-wal
+storage/
+data/*.db
+data/*.db-shm
+data/*.db-wal
 
