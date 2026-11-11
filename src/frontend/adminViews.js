@@ -202,105 +202,321 @@ export function renderAdminDashboardView(data) {
   `;
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatVnDateTime(dtStr) {
+  if (!dtStr) return '---';
+  try {
+    const d = new Date(dtStr);
+    if (isNaN(d.getTime())) return String(dtStr).slice(0, 19).replace('T', ' ');
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  } catch (e) {
+    return String(dtStr).slice(0, 19).replace('T', ' ');
+  }
+}
+
 /**
  * 12. TRANG QUẢN LÝ HỌC SINH (#/admin/students)
  */
 export function renderAdminStudentsView(students = [], filters = {}) {
+  const totalStudents = students.length;
+  const onlineCount = students.filter((s) => s.isOnline).length;
+  const totalOnlineMinutesToday = students.reduce((acc, s) => acc + (Number(s.todayOnlineMinutes) || 0), 0);
+  const totalSubmissions = students.reduce((acc, s) => acc + (Number(s.submission_count) || 0), 0);
+  const maxStreak = students.reduce((max, s) => Math.max(max, Number(s.streak_days) || 0), 0);
+
   return `
     <div class="space-y-6">
+      <!-- Tiêu đề trang & Thao tác chính -->
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold text-slate-900">Quản lý Tài khoản Học sinh</h1>
+          <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2.5">
+            <span>Quản lý Học sinh & Giám sát Truy cập</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              ${totalStudents} Học sinh
+            </span>
+          </h1>
           <p class="text-sm text-slate-500 mt-1">
-            Tạo tài khoản, tìm kiếm, xem lịch sử làm bài, khóa/mở khóa và cấp lại mật khẩu khi học sinh quên.
+            Theo dõi chi tiết tài khoản, mật khẩu, thời gian online hôm nay, lịch sử login/logout, số đề đã làm và chuỗi học tập của từng học sinh.
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button onclick="window.SpaceXApp.openVipCodesModal()" class="btn bg-amber-500 hover:bg-amber-600 text-white">
-            🔑 Kho Mã VIP khôi phục mật khẩu
+          <button onclick="window.SpaceXApp.openVipCodesModal()" class="btn bg-amber-500 hover:bg-amber-600 text-white shadow-sm flex items-center gap-1.5">
+            🔑 Kho Mã VIP Khôi phục Mật khẩu
           </button>
-          <button onclick="window.SpaceXApp.openCreateStudentModal()" class="btn btn-primary">
-            + Tạo tài khoản học sinh
+          <button onclick="window.SpaceXApp.openCreateStudentModal()" class="btn btn-primary shadow-sm flex items-center gap-1.5">
+            <span>+</span> Tạo Tài khoản Học sinh
           </button>
         </div>
       </div>
 
-      <!-- Thanh tìm kiếm & lọc -->
-      <div class="card p-4 flex flex-wrap items-center gap-3">
-        <input
-          id="admin-student-search"
-          type="text"
-          value="${filters.search || ''}"
-          placeholder="Tìm theo họ tên, username hoặc lớp..."
-          class="input flex-1 min-w-[240px]"
-          onkeydown="if(event.key==='Enter') window.SpaceXApp.searchAdminStudents()"
-        />
-        <select id="admin-student-status" onchange="window.SpaceXApp.searchAdminStudents()" class="input w-48">
-          <option value="">Tất cả trạng thái</option>
-          <option value="ACTIVE" ${filters.status === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động (ACTIVE)</option>
-          <option value="LOCKED" ${filters.status === 'LOCKED' ? 'selected' : ''}>Đã khóa (LOCKED)</option>
-        </select>
-        <button onclick="window.SpaceXApp.searchAdminStudents()" class="btn btn-primary">
-          🔍 Tìm kiếm
-        </button>
+      <!-- 5 Thẻ Thống kê Tổng quan (Classroom KPIs) -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        <div class="card p-4 border-l-4 border-l-blue-500 bg-white shadow-sm">
+          <div class="text-xs font-semibold uppercase text-slate-500">Sĩ số lớp</div>
+          <div class="text-2xl font-black text-slate-900 mt-1">${totalStudents} <span class="text-xs font-normal text-slate-500">em</span></div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Toàn bộ tài khoản học sinh</div>
+        </div>
+
+        <div class="card p-4 border-l-4 border-l-emerald-500 bg-emerald-50/40 shadow-sm">
+          <div class="text-xs font-semibold uppercase text-emerald-700 flex items-center gap-1.5">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            Đang Online
+          </div>
+          <div class="text-2xl font-black text-emerald-800 mt-1">${onlineCount} <span class="text-xs font-normal text-emerald-600">em</span></div>
+          <div class="text-[11px] text-emerald-700 mt-0.5">Hoạt động trong 4 phút qua</div>
+        </div>
+
+        <div class="card p-4 border-l-4 border-l-indigo-500 bg-white shadow-sm">
+          <div class="text-xs font-semibold uppercase text-slate-500">Học tập Hôm nay</div>
+          <div class="text-2xl font-black text-indigo-700 mt-1">${totalOnlineMinutesToday} <span class="text-xs font-normal text-slate-500">phút</span></div>
+          <div class="text-[11px] text-slate-400 mt-0.5">~ ${(totalOnlineMinutesToday / 60).toFixed(1)} giờ học cả lớp</div>
+        </div>
+
+        <div class="card p-4 border-l-4 border-l-cyan-500 bg-white shadow-sm">
+          <div class="text-xs font-semibold uppercase text-slate-500">Tổng lượt làm đề</div>
+          <div class="text-2xl font-black text-cyan-800 mt-1">${totalSubmissions} <span class="text-xs font-normal text-slate-500">lượt</span></div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Bài thi & BTVN đã nộp</div>
+        </div>
+
+        <div class="card p-4 border-l-4 border-l-amber-500 bg-white shadow-sm">
+          <div class="text-xs font-semibold uppercase text-slate-500">Kỷ lục Chuỗi ngày</div>
+          <div class="text-2xl font-black text-amber-600 mt-1">🔥 ${maxStreak} <span class="text-xs font-normal text-slate-500">ngày</span></div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Chuỗi học tập liên tục dài nhất</div>
+        </div>
       </div>
 
-      <!-- Bảng danh sách học sinh -->
-      <div class="card overflow-hidden">
+      <!-- Thanh Tìm kiếm, Lọc & Nút Đồng bộ -->
+      <div class="card p-4 flex flex-wrap items-center justify-between gap-3 bg-white shadow-sm">
+        <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+          <input
+            id="admin-student-search"
+            type="text"
+            value="${escapeHtml(filters.search || '')}"
+            placeholder="Tìm theo họ tên, @username hoặc lớp..."
+            class="input flex-1 min-w-[220px] text-sm"
+            onkeydown="if(event.key==='Enter') window.SpaceXApp.searchAdminStudents()"
+          />
+          <select id="admin-student-status" onchange="window.SpaceXApp.searchAdminStudents()" class="input w-44 text-sm">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="ACTIVE" ${filters.status === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động (ACTIVE)</option>
+            <option value="LOCKED" ${filters.status === 'LOCKED' ? 'selected' : ''}>Đã khóa (LOCKED)</option>
+          </select>
+          <button onclick="window.SpaceXApp.searchAdminStudents()" class="btn btn-primary text-sm px-4">
+            🔍 Tìm kiếm
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="window.SpaceXApp.navigate('#/admin/students')" class="btn btn-secondary text-xs" title="Tải lại danh sách học sinh">
+            🔄 Làm mới
+          </button>
+        </div>
+      </div>
+
+      <!-- Bảng Quản lý & Giám sát Chi tiết Học sinh -->
+      <div class="card overflow-hidden bg-white shadow-sm border border-slate-200">
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-sm">
             <thead>
-              <tr class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
-                <th class="p-4">Họ và tên</th>
-                <th class="p-4">Username</th>
-                <th class="p-4">Lớp</th>
-                <th class="p-4">Ngày tạo</th>
-                <th class="p-4">Lượt nộp / Điểm TB / Cao nhất</th>
-                <th class="p-4">Trạng thái</th>
-                <th class="p-4 text-right">Thao tác quản trị</th>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                <th class="p-3.5">Học sinh & Lớp</th>
+                <th class="p-3.5">Tài khoản (@Username)</th>
+                <th class="p-3.5">Mật khẩu (Hiện / Copy)</th>
+                <th class="p-3.5">Trạng thái & Lần truy cập cuối</th>
+                <th class="p-3.5">Thời lượng Online</th>
+                <th class="p-3.5">Làm bài & Streak</th>
+                <th class="p-3.5 text-right">Giám sát & Thao tác</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              ${students
-                .map(
-                  (s) => `
-                <tr class="hover:bg-slate-50">
-                  <td class="p-4 font-bold text-slate-900">${s.full_name}</td>
-                  <td class="p-4 font-mono text-xs text-blue-700">@${s.username}</td>
-                  <td class="p-4 text-slate-600">${s.class_name}</td>
-                  <td class="p-4 text-xs text-slate-500">${(s.created_at || '').slice(0, 10)}</td>
-                  <td class="p-4 text-xs">
-                    <strong>${s.submission_count} lượt</strong> •
-                    TB: <strong class="text-blue-600">${s.average_score}</strong> •
-                    Max: <strong class="text-emerald-600">${s.highest_score}</strong>
-                  </td>
-                  <td class="p-4">
-                    <span class="badge ${s.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'}">
-                      ${s.status === 'ACTIVE' ? 'Đang hoạt động' : 'Đã khóa'}
-                    </span>
-                  </td>
-                  <td class="p-4 text-right space-x-1.5 whitespace-nowrap">
-                    <button onclick="window.SpaceXApp.viewStudentDetailModal(${s.id})" class="btn btn-secondary text-xs">
-                      📊 Lịch sử & Điểm
-                    </button>
-                    <button onclick="window.SpaceXApp.openResetStudentPasswordModal(${s.id}, '${s.username}', '${s.full_name}')" class="btn btn-secondary text-xs">
-                      🔑 Đổi mật khẩu
-                    </button>
-                    <button onclick="window.SpaceXApp.toggleStudentLockStatus(${s.id}, '${s.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE'}')" class="btn text-xs ${
-                    s.status === 'ACTIVE'
-                      ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                      : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                  }">
-                      ${s.status === 'ACTIVE' ? '🔒 Khóa' : '🔓 Mở khóa'}
-                    </button>
-                    <button onclick="window.SpaceXApp.deleteStudentAccount(${s.id}, '${s.full_name}')" class="btn bg-red-50 text-red-600 hover:bg-red-100 text-xs">
-                      🗑️ Xóa
-                    </button>
+              ${
+                students.length === 0
+                  ? `
+                <tr>
+                  <td colspan="7" class="p-8 text-center text-slate-500 text-sm">
+                    Không tìm thấy học sinh nào phù hợp với bộ lọc.
                   </td>
                 </tr>
               `
-                )
-                .join('')}
+                  : students
+                      .map((s) => {
+                        const plainPwd = s.plain_password || '';
+                        const safePwdEscaped = escapeHtml(plainPwd).replace(/'/g, "\\'");
+                        return `
+                <tr class="hover:bg-blue-50/30 transition-colors">
+                  <!-- Họ tên & Lớp -->
+                  <td class="p-3.5">
+                    <div class="font-bold text-slate-900">${escapeHtml(s.full_name)}</div>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                        ${escapeHtml(s.class_name || '12A1')}
+                      </span>
+                      ${s.nickname && s.nickname !== s.full_name ? `<span class="text-[11px] text-slate-400">(${escapeHtml(s.nickname)})</span>` : ''}
+                      <span class="text-[11px] text-slate-400">• Tạo: ${(s.created_at || '').slice(0, 10)}</span>
+                    </div>
+                  </td>
+
+                  <!-- Username -->
+                  <td class="p-3.5">
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                        @${escapeHtml(s.username)}
+                      </span>
+                      <button
+                        onclick="window.SpaceXApp.copyText('${escapeHtml(s.username)}', 'tên đăng nhập')"
+                        title="Sao chép Username"
+                        class="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </td>
+
+                  <!-- Mật khẩu rõ ràng (Ẩn/Hiện & Copy) -->
+                  <td class="p-3.5">
+                    <div class="flex items-center gap-1.5">
+                      <span
+                        id="pwd-val-${s.id}"
+                        data-revealed="false"
+                        class="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200 tracking-wider inline-block min-w-[70px] text-center"
+                      >
+                        ••••••••
+                      </span>
+                      <button
+                        type="button"
+                        onclick="window.SpaceXApp.togglePasswordVisibility(${s.id}, '${safePwdEscaped}')"
+                        title="Bấm để Xem/Ẩn mật khẩu"
+                        class="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-slate-900 transition"
+                      >
+                        👁️
+                      </button>
+                      <button
+                        type="button"
+                        onclick="window.SpaceXApp.copyPassword('${safePwdEscaped}')"
+                        title="Bấm để Sao chép mật khẩu"
+                        class="p-1 hover:bg-blue-100 rounded text-blue-600 hover:text-blue-800 transition"
+                      >
+                        📋
+                      </button>
+                    </div>
+                    ${
+                      !plainPwd
+                        ? `<div class="text-[10px] text-amber-600 mt-0.5">⚠️ Đổi MK để lưu text</div>`
+                        : ''
+                    }
+                  </td>
+
+                  <!-- Trạng thái Online & Đăng nhập/Đăng xuất -->
+                  <td class="p-3.5">
+                    <div>
+                      ${
+                        s.isOnline
+                          ? `
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
+                          <span class="relative flex h-2 w-2">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                          Đang Online
+                        </span>
+                      `
+                          : `
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                          <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                          Offline
+                        </span>
+                      `
+                      }
+                      <span class="ml-1 badge ${s.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'} text-[10px]">
+                        ${s.status === 'ACTIVE' ? 'Hoạt động' : 'Đã khóa'}
+                      </span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1">
+                      🕒 Vào: <strong class="text-slate-700">${formatVnDateTime(s.last_login_at)}</strong>
+                    </div>
+                    ${
+                      s.last_logout_at
+                        ? `<div class="text-[11px] text-slate-400">🚪 Ra: ${formatVnDateTime(s.last_logout_at)}</div>`
+                        : ''
+                    }
+                  </td>
+
+                  <!-- Thời lượng Online -->
+                  <td class="p-3.5">
+                    <div class="text-xs font-bold text-blue-700">
+                      ⚡ Hôm nay: ${s.todayOnlineMinutes || 0} phút
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">
+                      ⏱️ Tổng: <strong>${s.totalOnlineMinutes || 0}</strong> phút (~${((s.totalOnlineMinutes || 0) / 60).toFixed(1)}h)
+                    </div>
+                  </td>
+
+                  <!-- Làm bài & Chuỗi Streak -->
+                  <td class="p-3.5">
+                    <div class="text-xs">
+                      <strong>${s.completed_exams_count || s.submission_count || 0} đề</strong> (${s.submission_count || 0} lượt nộp)
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">
+                      TB: <strong class="text-blue-600">${s.average_score}</strong> • Max: <strong class="text-emerald-600">${s.highest_score}</strong>
+                    </div>
+                    <div class="text-xs font-bold text-amber-600 mt-0.5">
+                      🔥 ${s.streak_days || 0} ngày liên tục
+                    </div>
+                  </td>
+
+                  <!-- Thao tác Quản trị & Giám sát -->
+                  <td class="p-3.5 text-right space-x-1 whitespace-nowrap">
+                    <button
+                      onclick="window.SpaceXApp.viewStudentDetailModal(${s.id})"
+                      class="btn bg-blue-600 hover:bg-blue-700 text-white text-xs px-2.5 py-1.5 shadow-sm"
+                      title="Xem toàn bộ nhật ký phiên login, thời gian học, các đề đã làm"
+                    >
+                      🔍 Giám sát & Hồ sơ
+                    </button>
+                    <button
+                      onclick="window.SpaceXApp.openResetStudentPasswordModal(${s.id}, '${escapeHtml(s.username)}', '${escapeHtml(s.full_name)}')"
+                      class="btn btn-secondary text-xs px-2 py-1.5"
+                      title="Cấp lại mật khẩu mới cho học sinh"
+                    >
+                      🔑 Đổi MK
+                    </button>
+                    <button
+                      onclick="window.SpaceXApp.toggleStudentLockStatus(${s.id}, '${s.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE'}')"
+                      class="btn text-xs px-2 py-1.5 ${
+                        s.status === 'ACTIVE'
+                          ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                      }"
+                      title="${s.status === 'ACTIVE' ? 'Khóa tài khoản này' : 'Mở khóa tài khoản này'}"
+                    >
+                      ${s.status === 'ACTIVE' ? '🔒' : '🔓'}
+                    </button>
+                    <button
+                      onclick="window.SpaceXApp.deleteStudentAccount(${s.id}, '${escapeHtml(s.full_name)}')"
+                      class="btn bg-red-50 text-red-600 hover:bg-red-100 text-xs px-2 py-1.5"
+                      title="Xóa tài khoản này"
+                    >
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              `;
+                      })
+                      .join('')
+              }
             </tbody>
           </table>
         </div>

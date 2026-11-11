@@ -2,6 +2,8 @@ import { getDb } from '../db/database.mjs';
 import { ENV, updateEnvVariables } from '../config/env.mjs';
 import {
   loginUser,
+  logoutUser,
+  recordHeartbeat,
   registerStudent,
   hashPassword,
   verifyPassword,
@@ -155,8 +157,34 @@ export async function handleApiRequest(req, res, urlObj) {
     // ========================================================================
     if (pathname === '/api/auth/login' && method === 'POST') {
       const body = await readJsonBody(req);
-      const result = loginUser(body.username, body.password);
+      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      const userAgent = req.headers['user-agent'] || '';
+      let deviceType = 'Desktop';
+      if (/android/i.test(userAgent)) deviceType = 'Android';
+      else if (/iphone|ipad|ipod/i.test(userAgent)) deviceType = 'iOS';
+      else if (/macintosh/i.test(userAgent)) deviceType = 'Mac';
+      else if (/windows/i.test(userAgent)) deviceType = 'Windows PC';
+
+      const result = loginUser(body.username, body.password, { ip, userAgent, deviceType });
       return sendJson(res, 200, result);
+    }
+
+    if (pathname === '/api/auth/logout' && method === 'POST') {
+      const auth = authenticateRequest(req);
+      if (auth) {
+        logoutUser(auth.id, {
+          ip: (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(),
+        });
+      }
+      return sendJson(res, 200, { message: 'Đăng xuất thành công.' });
+    }
+
+    if (pathname === '/api/user/heartbeat' && method === 'POST') {
+      const auth = authenticateRequest(req);
+      if (auth) {
+        recordHeartbeat(auth.id);
+      }
+      return sendJson(res, 200, { ok: true });
     }
 
     if (pathname === '/api/auth/register' && method === 'POST') {
@@ -462,8 +490,10 @@ export async function handleApiRequest(req, res, urlObj) {
       let rows = db
         .prepare(
           `SELECT u.id, u.username, u.full_name, u.nickname, u.class_name, u.status,
-                  u.streak_days, u.best_streak_days, u.last_active_date, u.created_at,
+                  u.plain_password, u.last_login_at, u.last_logout_at, u.last_seen_at,
+                  u.total_online_seconds, u.streak_days, u.best_streak_days, u.last_active_date, u.created_at,
                   COUNT(ea.id) as submission_count,
+                  COUNT(DISTINCT ea.exam_id) as completed_exams_count,
                   COALESCE(ROUND(AVG(ea.total_score), 2), 0) as average_score,
                   COALESCE(ROUND(MAX(ea.total_score), 2), 0) as highest_score
            FROM users u
@@ -475,8 +505,29 @@ export async function handleApiRequest(req, res, urlObj) {
         )
         .all();
 
+      const now = Date.now();
+      const today = new Date().toISOString().slice(0, 10);
+
+      const enrichedStudents = rows.map((s) => {
+        const lastSeenMs = s.last_seen_at ? new Date(s.last_seen_at).getTime() : 0;
+        const isOnline = lastSeenMs > 0 && now - lastSeenMs < 4 * 60 * 1000;
+
+        const actRow = db
+          .prepare('SELECT online_seconds_today FROM learning_activities WHERE user_id = ? AND activity_date = ?')
+          .get(s.id, today);
+        const todayOnlineSeconds = actRow?.online_seconds_today || 0;
+
+        return {
+          ...s,
+          isOnline,
+          todayOnlineMinutes: Math.round(todayOnlineSeconds / 60),
+          totalOnlineMinutes: Math.round((s.total_online_seconds || 0) / 60),
+        };
+      });
+
+      let finalStudents = enrichedStudents;
       if (search) {
-        rows = rows.filter(
+        finalStudents = finalStudents.filter(
           (r) =>
             r.full_name.toLowerCase().includes(search) ||
             r.username.toLowerCase().includes(search) ||
@@ -484,10 +535,10 @@ export async function handleApiRequest(req, res, urlObj) {
         );
       }
       if (statusFilter) {
-        rows = rows.filter((r) => r.status === statusFilter);
+        finalStudents = finalStudents.filter((r) => r.status === statusFilter);
       }
 
-      return sendJson(res, 200, { students: rows });
+      return sendJson(res, 200, { students: finalStudents });
     }
 
     if (pathname === '/api/admin/students' && method === 'POST') {
@@ -515,7 +566,8 @@ export async function handleApiRequest(req, res, urlObj) {
         const student = db
           .prepare(
             `SELECT u.id, u.username, u.full_name, u.nickname, u.class_name, u.status,
-                    u.streak_days, u.best_streak_days, u.last_active_date, u.created_at
+                    u.plain_password, u.last_login_at, u.last_logout_at, u.last_seen_at,
+                    u.total_online_seconds, u.streak_days, u.best_streak_days, u.last_active_date, u.created_at
              FROM users u
              JOIN roles r ON u.role_id = r.id
              WHERE u.id = ? AND r.name = 'STUDENT'`
@@ -534,8 +586,33 @@ export async function handleApiRequest(req, res, urlObj) {
           )
           .all(studentId);
 
+        const loginLogs = db
+          .prepare(`SELECT * FROM user_login_logs WHERE user_id = ? ORDER BY id DESC LIMIT 50`)
+          .all(studentId);
+
+        const activityLogs = db
+          .prepare(`SELECT * FROM student_activity_logs WHERE user_id = ? ORDER BY id DESC LIMIT 50`)
+          .all(studentId);
+
+        const dailyStats = db
+          .prepare(
+            `SELECT activity_date, submission_count, completed_exams_count, total_score_earned,
+                    ROUND(COALESCE(online_seconds_today, 0) / 60, 1) as online_minutes
+             FROM learning_activities
+             WHERE user_id = ?
+             ORDER BY activity_date DESC LIMIT 14`
+          )
+          .all(studentId);
+
         const contributionGraph = getStudentContributionGraph(studentId);
-        return sendJson(res, 200, { student, attempts, contributionGraph });
+        return sendJson(res, 200, {
+          student,
+          attempts,
+          loginLogs,
+          activityLogs,
+          dailyStats,
+          contributionGraph,
+        });
       }
 
       if (method === 'PUT') {
@@ -577,8 +654,9 @@ export async function handleApiRequest(req, res, urlObj) {
         return sendJson(res, 400, { error: 'Mật khẩu mới cấp cho học sinh phải có ít nhất 6 ký tự.' });
       }
       const hashed = hashPassword(newPassword);
-      db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ? AND role_id = 2").run(
+      db.prepare("UPDATE users SET password_hash = ?, plain_password = ?, updated_at = datetime('now') WHERE id = ? AND role_id = 2").run(
         hashed,
+        newPassword,
         studentId
       );
       return sendJson(res, 200, {

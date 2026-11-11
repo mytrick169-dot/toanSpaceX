@@ -56,6 +56,7 @@ function initSchema(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      plain_password TEXT,
       full_name TEXT NOT NULL,
       nickname TEXT,
       class_name TEXT DEFAULT '12A1',
@@ -64,6 +65,10 @@ function initSchema(db) {
       streak_days INTEGER DEFAULT 0,
       best_streak_days INTEGER DEFAULT 0,
       last_active_date TEXT,
+      last_login_at TEXT,
+      last_logout_at TEXT,
+      last_seen_at TEXT,
+      total_online_seconds INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -285,6 +290,33 @@ function initSchema(db) {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- 18. USER_LOGIN_LOGS (Nhật ký phiên đăng nhập & thời gian online)
+    CREATE TABLE IF NOT EXISTS user_login_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      session_token TEXT,
+      login_at TEXT DEFAULT (datetime('now')),
+      logout_at TEXT,
+      last_active_at TEXT DEFAULT (datetime('now')),
+      duration_seconds INTEGER DEFAULT 0,
+      ip_address TEXT,
+      user_agent TEXT,
+      device_type TEXT DEFAULT 'Desktop',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- 19. STUDENT_ACTIVITY_LOGS (Nhật ký từng hành động chi tiết của học sinh trên web)
+    CREATE TABLE IF NOT EXISTS student_activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action_type TEXT NOT NULL,
+      target_id INTEGER,
+      target_title TEXT,
+      details TEXT,
+      ip_address TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
     CREATE INDEX IF NOT EXISTS idx_chapters_subject ON chapters(subject_id);
     CREATE INDEX IF NOT EXISTS idx_lessons_chapter ON lessons(chapter_id);
@@ -293,7 +325,26 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_attempts_user ON exam_attempts(user_id);
     CREATE INDEX IF NOT EXISTS idx_attempts_exam ON exam_attempts(exam_id);
     CREATE INDEX IF NOT EXISTS idx_activities_user_date ON learning_activities(user_id, activity_date);
+    CREATE INDEX IF NOT EXISTS idx_login_logs_user ON user_login_logs(user_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON student_activity_logs(user_id);
   `);
+
+  // Migrations an toàn cho Database đang chạy
+  const migrations = [
+    `ALTER TABLE users ADD COLUMN plain_password TEXT;`,
+    `ALTER TABLE users ADD COLUMN last_login_at TEXT;`,
+    `ALTER TABLE users ADD COLUMN last_logout_at TEXT;`,
+    `ALTER TABLE users ADD COLUMN last_seen_at TEXT;`,
+    `ALTER TABLE users ADD COLUMN total_online_seconds INTEGER DEFAULT 0;`,
+    `ALTER TABLE learning_activities ADD COLUMN online_seconds_today INTEGER DEFAULT 0;`
+  ];
+  for (const m of migrations) {
+    try {
+      db.exec(m);
+    } catch {
+      // Column đã tồn tại thì bỏ qua
+    }
+  }
 
   // Khởi tạo Roles mặc định nếu chưa có
   const roleCount = db.prepare('SELECT COUNT(*) as c FROM roles').get().c;

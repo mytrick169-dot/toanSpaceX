@@ -36,6 +36,16 @@ const AppState = {
   allExamsCache: [],
 };
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Gọi REST API Backend kèm JWT Authorization Header
  */
@@ -112,8 +122,18 @@ function stopExamCountdown() {
   }
 }
 
-function logout(redirect = true) {
+async function logout(redirect = true) {
   stopExamCountdown();
+  try {
+    if (AppState.token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AppState.token}` },
+      });
+    }
+  } catch (e) {
+    // silent
+  }
   AppState.token = '';
   AppState.user = null;
   localStorage.removeItem('spacex_math_token');
@@ -121,6 +141,25 @@ function logout(redirect = true) {
   if (redirect) {
     navigate('#/login');
   }
+}
+
+// Gửi Heartbeat định kỳ 45s để cập nhật trạng thái Online và thời gian học
+function startHeartbeatInterval() {
+  setInterval(async () => {
+    try {
+      if (AppState.token) {
+        await fetch('/api/user/heartbeat', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${AppState.token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+      }
+    } catch (e) {
+      // silent
+    }
+  }, 45000);
 }
 
 function navigate(hash) {
@@ -1300,40 +1339,327 @@ window.SpaceXApp = {
     }
   },
 
+  togglePasswordVisibility(studentId, pwd) {
+    const el = document.getElementById(`pwd-val-${studentId}`);
+    if (!el) return;
+    if (el.dataset.revealed === 'true') {
+      el.textContent = '••••••••';
+      el.dataset.revealed = 'false';
+    } else {
+      el.textContent = pwd || '(Trống)';
+      el.dataset.revealed = 'true';
+    }
+  },
+
+  copyPassword(pwd) {
+    if (!pwd) {
+      showToast('Tài khoản này chưa có mật khẩu text. Vui lòng bấm "Đổi MK" để cấp mới.', 'warning');
+      return;
+    }
+    navigator.clipboard.writeText(pwd).then(() => {
+      showToast(`Đã sao chép mật khẩu: "${pwd}" vào bộ nhớ tạm!`, 'success');
+    }).catch(() => {
+      prompt('Mật khẩu của học sinh là:', pwd);
+    });
+  },
+
+  copyText(text, label = 'nội dung') {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`Đã sao chép ${label}: "${text}"`, 'success');
+    }).catch(() => {
+      prompt(`Sao chép ${label}:`, text);
+    });
+  },
+
+  switchStudentModalTab(tabId) {
+    const tabs = ['tab-sessions', 'tab-attempts', 'tab-audit'];
+    tabs.forEach((t) => {
+      const pane = document.getElementById(`pane-${t}`);
+      const btn = document.getElementById(`btn-${t}`);
+      if (pane) pane.classList.toggle('hidden', t !== tabId);
+      if (btn) {
+        if (t === tabId) {
+          btn.className = 'px-3 py-2 text-xs font-bold border-b-2 border-blue-600 text-blue-600 transition';
+        } else {
+          btn.className = 'px-3 py-2 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition';
+        }
+      }
+    });
+  },
+
   async viewStudentDetailModal(studentId) {
     try {
-      const { student, attempts, contributionGraph } = await apiFetch(`/api/admin/students/${studentId}`);
+      const data = await apiFetch(`/api/admin/students/${studentId}`);
+      const {
+        student,
+        attempts = [],
+        loginLogs = [],
+        activityLogs = [],
+        dailyStats = [],
+        contributionGraph,
+      } = data;
+
+      const now = Date.now();
+      const lastSeenMs = student.last_seen_at ? new Date(student.last_seen_at).getTime() : 0;
+      const isOnline = lastSeenMs > 0 && now - lastSeenMs < 4 * 60 * 1000;
+      const totalOnlineMin = Math.round((student.total_online_seconds || 0) / 60);
+
+      const totalAttempts = attempts.length;
+      const avgScore = totalAttempts > 0
+        ? (attempts.reduce((acc, a) => acc + Number(a.total_score || 0), 0) / totalAttempts).toFixed(1)
+        : '0.0';
+      const maxScore = totalAttempts > 0
+        ? Math.max(...attempts.map((a) => Number(a.total_score || 0))).toFixed(1)
+        : '0.0';
+
+      const safePwd = escapeHtml(student.plain_password || '').replace(/'/g, "\\'");
+
       showModal(`
-        <div class="space-y-4">
-          <div>
-            <span class="badge ${student.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'}">${student.status}</span>
-            <h3 class="text-xl font-bold text-slate-900 mt-1">${student.full_name} (@${student.username})</h3>
-            <p class="text-xs text-slate-500">Lớp: ${student.class_name} • Ngày tạo: ${student.created_at} • Chuỗi học: ${student.streak_days} ngày</p>
+        <div class="space-y-4 max-w-4xl text-left">
+          <!-- Header Profile Học sinh -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-extrabold flex items-center justify-center text-lg shadow-sm">
+                ${(student.full_name || 'H').slice(0, 1).toUpperCase()}
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-xl font-bold text-slate-900">${escapeHtml(student.full_name)}</h3>
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
+                    Lớp ${escapeHtml(student.class_name || '12A1')}
+                  </span>
+                  ${
+                    isOnline
+                      ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Đang Online
+                        </span>`
+                      : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                          <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Offline
+                        </span>`
+                  }
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                  <span>Username: <strong class="text-blue-700 font-mono">@${escapeHtml(student.username)}</strong></span>
+                  <span>•</span>
+                  <span>Mật khẩu: <strong class="text-slate-800 font-mono bg-slate-100 px-2 py-0.5 rounded border">${student.plain_password ? escapeHtml(student.plain_password) : '(Chưa lưu text)'}</strong></span>
+                  <button type="button" onclick="window.SpaceXApp.copyPassword('${safePwd}')" class="text-blue-600 hover:underline">📋 Copy MK</button>
+                  <span>•</span>
+                  <span>Ngày tạo: ${(student.created_at || '').slice(0, 10)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="window.SpaceXApp.openResetStudentPasswordModal(${student.id}, '${escapeHtml(student.username)}', '${escapeHtml(student.full_name)}')" class="btn btn-secondary text-xs">
+                🔑 Cấp lại Mật khẩu
+              </button>
+            </div>
           </div>
 
-          ${renderGithubContributionGraphHtml(contributionGraph, 'Biểu đồ Hoạt động của Học sinh')}
+          <!-- 4 Thẻ KPI Tóm tắt -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">Thời lượng Online</div>
+              <div class="text-lg font-black text-blue-700 mt-0.5">${totalOnlineMin} <span class="text-xs font-normal">phút</span></div>
+              <div class="text-[10px] text-slate-400">~ ${(totalOnlineMin / 60).toFixed(1)} giờ tích lũy</div>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">Đề đã nộp</div>
+              <div class="text-lg font-black text-slate-900 mt-0.5">${totalAttempts} <span class="text-xs font-normal">lượt</span></div>
+              <div class="text-[10px] text-slate-400">Bài tập & Đề thi</div>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">Điểm TB / Cao nhất</div>
+              <div class="text-lg font-black text-emerald-600 mt-0.5">${avgScore} <span class="text-xs font-normal text-slate-400">/ ${maxScore}</span></div>
+              <div class="text-[10px] text-slate-400">Thang điểm 10</div>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div class="text-[11px] font-semibold text-slate-500 uppercase">Chuỗi ngày Streak</div>
+              <div class="text-lg font-black text-amber-600 mt-0.5">🔥 ${student.streak_days || 0} <span class="text-xs font-normal text-slate-500">ngày</span></div>
+              <div class="text-[10px] text-slate-400">Kỷ lục: ${student.best_streak_days || 0} ngày</div>
+            </div>
+          </div>
 
-          <div>
-            <h4 class="text-sm font-bold text-slate-900 mb-2">Lịch sử làm bài (${attempts.length} lượt)</h4>
-            ${
-              attempts.length === 0
-                ? `<p class="text-xs text-slate-500">Học sinh chưa có lượt nộp bài nào.</p>`
-                : `<div class="max-h-56 overflow-y-auto space-y-2">
-                    ${attempts
-                      .map(
-                        (a) => `
-                      <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                        <div>
-                          <div class="font-bold text-slate-900">${a.exam_title}</div>
-                          <div class="text-slate-500">Nộp lúc: ${(a.submitted_at || a.started_at || '').slice(0, 19)} • Đúng ${a.correct_count} / Sai ${a.wrong_count}</div>
-                        </div>
-                        <div class="font-extrabold text-sm text-blue-600">${a.total_score}/10</div>
-                      </div>
-                    `
-                      )
-                      .join('')}
-                   </div>`
-            }
+          <!-- 3 Tab Navigation -->
+          <div class="border-b border-slate-200 flex items-center gap-2 pt-2">
+            <button
+              id="btn-tab-sessions"
+              onclick="window.SpaceXApp.switchStudentModalTab('tab-sessions')"
+              class="px-3 py-2 text-xs font-bold border-b-2 border-blue-600 text-blue-600 transition"
+            >
+              🕒 Nhật ký Đăng nhập & Đăng xuất (${loginLogs.length} phiên)
+            </button>
+            <button
+              id="btn-tab-attempts"
+              onclick="window.SpaceXApp.switchStudentModalTab('tab-attempts')"
+              class="px-3 py-2 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition"
+            >
+              📝 Lịch sử Làm đề & Điểm số (${attempts.length} bài)
+            </button>
+            <button
+              id="btn-tab-audit"
+              onclick="window.SpaceXApp.switchStudentModalTab('tab-audit')"
+              class="px-3 py-2 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition"
+            >
+              🕵️ Chi tiết Hành vi & Biểu đồ 14 ngày
+            </button>
+          </div>
+
+          <!-- PANE 1: NHẬT KÝ ĐĂNG NHẬP / ĐĂNG XUẤT -->
+          <div id="pane-tab-sessions" class="space-y-3">
+            <div class="max-h-72 overflow-y-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                    <th class="p-2.5">Phiên #</th>
+                    <th class="p-2.5">Đăng nhập (Login)</th>
+                    <th class="p-2.5">Đăng xuất (Logout)</th>
+                    <th class="p-2.5">Thời lượng</th>
+                    <th class="p-2.5">Thiết bị</th>
+                    <th class="p-2.5">Địa chỉ IP</th>
+                    <th class="p-2.5">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${
+                    loginLogs.length === 0
+                      ? `<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có nhật ký phiên đăng nhập nào ghi nhận.</td></tr>`
+                      : loginLogs.map((log, idx) => `
+                        <tr class="hover:bg-slate-50">
+                          <td class="p-2.5 font-bold text-slate-500">#${loginLogs.length - idx}</td>
+                          <td class="p-2.5 font-semibold text-slate-800">${log.login_at ? log.login_at.slice(0, 19).replace('T', ' ') : '---'}</td>
+                          <td class="p-2.5 text-slate-600">${log.logout_at ? log.logout_at.slice(0, 19).replace('T', ' ') : '<span class="text-emerald-600 font-semibold">Đang duy trì</span>'}</td>
+                          <td class="p-2.5 font-bold text-blue-700">${log.duration_seconds ? Math.round(log.duration_seconds / 60) + ' phút' : '---'}</td>
+                          <td class="p-2.5"><span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">${escapeHtml(log.device_type || 'Máy tính')}</span></td>
+                          <td class="p-2.5 font-mono text-slate-500 text-[11px]">${escapeHtml(log.ip_address || '---')}</td>
+                          <td class="p-2.5">
+                            ${
+                              !log.logout_at
+                                ? `<span class="badge badge-success text-[10px]">Đang mở</span>`
+                                : `<span class="badge badge-neutral text-[10px]">Đã thoát</span>`
+                            }
+                          </td>
+                        </tr>
+                      `).join('')
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PANE 2: LỊCH SỬ LÀM ĐỀ & ĐIỂM SỐ -->
+          <div id="pane-tab-attempts" class="space-y-3 hidden">
+            <div class="max-h-72 overflow-y-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                    <th class="p-2.5">Đề kiểm tra</th>
+                    <th class="p-2.5">Thời gian nộp</th>
+                    <th class="p-2.5">Điểm số</th>
+                    <th class="p-2.5">Đúng / Sai</th>
+                    <th class="p-2.5">Thời gian làm</th>
+                    <th class="p-2.5 text-right">Chi tiết bài làm</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${
+                    attempts.length === 0
+                      ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">Học sinh chưa làm đề thi nào.</td></tr>`
+                      : attempts.map((a) => {
+                          const sc = Number(a.total_score || 0);
+                          const scColor = sc >= 8 ? 'text-emerald-600' : sc >= 5 ? 'text-blue-600' : 'text-amber-600';
+                          return `
+                        <tr class="hover:bg-slate-50">
+                          <td class="p-2.5">
+                            <div class="font-bold text-slate-900">${escapeHtml(a.exam_title || 'Bài tập')}</div>
+                            <div class="text-[10px] text-slate-400">${escapeHtml(a.chapter_name || '')}</div>
+                          </td>
+                          <td class="p-2.5 text-slate-600">${(a.submitted_at || a.started_at || '').slice(0, 19).replace('T', ' ')}</td>
+                          <td class="p-2.5"><span class="text-sm font-black ${scColor}">${a.total_score}/10</span></td>
+                          <td class="p-2.5 text-slate-700">Đúng <strong class="text-emerald-600">${a.correct_count}</strong> / Sai <strong class="text-red-500">${a.wrong_count}</strong></td>
+                          <td class="p-2.5 text-slate-500">${a.time_spent_seconds ? Math.round(a.time_spent_seconds / 60) + ' phút' : '---'}</td>
+                          <td class="p-2.5 text-right">
+                            <button onclick="window.SpaceXApp.closeModal(); window.SpaceXApp.navigate('#/student/review/${a.id}')" class="btn btn-secondary text-[11px] px-2 py-1">
+                              Xem bài làm →
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                        }).join('')
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PANE 3: AUDIT TRAIL HÀNH VI & BIỂU ĐỒ 14 NGÀY -->
+          <div id="pane-tab-audit" class="space-y-4 hidden">
+            <!-- Timeline hành vi gần nhất -->
+            <div>
+              <h5 class="text-xs font-bold text-slate-700 uppercase mb-2">Dòng thời gian hành vi (Audit Trail gần nhất)</h5>
+              <div class="max-h-48 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                ${
+                  activityLogs.length === 0
+                    ? `<p class="text-xs text-slate-400 text-center py-2">Chưa ghi nhận hành vi cụ thể nào.</p>`
+                    : activityLogs.map((act) => {
+                        let icon = 'ℹ️';
+                        let actionLabel = act.action_type;
+                        if (act.action_type === 'LOGIN') { icon = '🟢'; actionLabel = 'Đăng nhập hệ thống'; }
+                        else if (act.action_type === 'LOGOUT') { icon = '🚪'; actionLabel = 'Đăng xuất khỏi hệ thống'; }
+                        else if (act.action_type === 'START_EXAM') { icon = '📖'; actionLabel = 'Bắt đầu làm bài: ' + (act.target_title || ''); }
+                        else if (act.action_type === 'SUBMIT_EXAM') { icon = '📝'; actionLabel = 'Nộp bài thi: ' + (act.target_title || ''); }
+
+                        return `
+                          <div class="flex items-start justify-between gap-2 text-xs p-2 rounded bg-white border border-slate-100">
+                            <div class="flex items-start gap-2">
+                              <span>${icon}</span>
+                              <div>
+                                <span class="font-bold text-slate-800">${escapeHtml(actionLabel)}</span>
+                                ${act.details ? `<div class="text-[11px] text-slate-500">${escapeHtml(act.details)}</div>` : ''}
+                              </div>
+                            </div>
+                            <div class="text-[10px] text-slate-400 whitespace-nowrap text-right">
+                              ${(act.created_at || '').slice(0, 19).replace('T', ' ')}
+                            </div>
+                          </div>
+                        `;
+                      }).join('')
+                }
+              </div>
+            </div>
+
+            <!-- Bảng học tập 14 ngày qua -->
+            <div>
+              <h5 class="text-xs font-bold text-slate-700 uppercase mb-2">Thống kê học tập 14 ngày gần nhất</h5>
+              <div class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                      <th class="p-2">Ngày</th>
+                      <th class="p-2">Thời gian Online</th>
+                      <th class="p-2">Đề hoàn thành</th>
+                      <th class="p-2">Điểm đạt được</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    ${
+                      dailyStats.length === 0
+                        ? `<tr><td colspan="4" class="p-2 text-center text-slate-400">Chưa có dữ liệu thống kê theo ngày.</td></tr>`
+                        : dailyStats.map((d) => `
+                          <tr class="hover:bg-slate-50">
+                            <td class="p-2 font-mono font-semibold text-slate-700">${d.activity_date}</td>
+                            <td class="p-2 font-bold text-blue-700">⚡ ${d.online_minutes || 0} phút</td>
+                            <td class="p-2 text-slate-700">${d.completed_exams_count || d.submission_count || 0} đề</td>
+                            <td class="p-2 font-bold text-emerald-600">${d.total_score_earned || 0} đ</td>
+                          </tr>
+                        `).join('')
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            ${renderGithubContributionGraphHtml(contributionGraph, 'Biểu đồ Nhiệt Hoạt động Học tập (Contribution Graph)')}
           </div>
         </div>
       `);
@@ -2420,5 +2746,8 @@ window.SpaceXApp = {
 };
 
 window.addEventListener('hashchange', handleRouteChange);
-window.addEventListener('DOMContentLoaded', handleRouteChange);
+window.addEventListener('DOMContentLoaded', () => {
+  startHeartbeatInterval();
+  handleRouteChange();
+});
 

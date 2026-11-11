@@ -247,16 +247,17 @@ export function resetStudentPasswordWithVipCode({ username, vipCode, newPassword
 
   if (student) {
     // Cập nhật mật khẩu cho học sinh đã tồn tại
-    db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
+    db.prepare("UPDATE users SET password_hash = ?, plain_password = ?, updated_at = datetime('now') WHERE id = ?").run(
       passwordHash,
+      pwd,
       student.id
     );
   } else {
     // Tự động tạo mới tài khoản học sinh bằng mã VIP
     db.prepare(`
-      INSERT INTO users (username, password_hash, full_name, nickname, class_name, role_id, status)
-      VALUES (?, ?, ?, ?, '12A1', 2, 'ACTIVE')
-    `).run(validUsername, passwordHash, fullName, fullName);
+      INSERT INTO users (username, password_hash, plain_password, full_name, nickname, class_name, role_id, status, last_login_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, '12A1', 2, 'ACTIVE', datetime('now'), datetime('now'))
+    `).run(validUsername, passwordHash, pwd, fullName, fullName);
   }
 
   // Cập nhật số lần dùng và ghi nhận username vừa sử dụng mã VIP

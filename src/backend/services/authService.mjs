@@ -85,7 +85,7 @@ export function verifyJwt(token) {
 /**
  * Đăng nhập bằng username (hoặc Họ tên / Biệt danh) & password
  */
-export function loginUser(username, password) {
+export function loginUser(username, password, clientMeta = {}) {
   const db = getDb();
   const cleanUsername = String(username || '').trim();
   const cleanLower = cleanUsername.toLowerCase();
@@ -136,6 +136,38 @@ export function loginUser(username, password) {
     throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
   }
 
+  // Ghi nhận thời gian đăng nhập & lịch sử phiên làm việc
+  try {
+    db.prepare(`
+      UPDATE users
+      SET last_login_at = datetime('now'),
+          last_seen_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(matchedUser.id);
+
+    db.prepare(`
+      INSERT INTO user_login_logs (user_id, login_at, last_active_at, ip_address, user_agent, device_type)
+      VALUES (?, datetime('now'), datetime('now'), ?, ?, ?)
+    `).run(
+      matchedUser.id,
+      clientMeta.ip || '127.0.0.1',
+      clientMeta.userAgent || '',
+      clientMeta.deviceType || 'Web'
+    );
+
+    db.prepare(`
+      INSERT INTO student_activity_logs (user_id, action_type, details, ip_address)
+      VALUES (?, 'LOGIN', ?, ?)
+    `).run(
+      matchedUser.id,
+      `Đăng nhập thành công vào hệ thống qua thiết bị ${clientMeta.deviceType || 'Web'}`,
+      clientMeta.ip || ''
+    );
+  } catch (logErr) {
+    console.warn('[Login Audit Log Warning]:', logErr.message);
+  }
+
   const token = signJwt({
     userId: matchedUser.id,
     username: matchedUser.username,
@@ -147,6 +179,94 @@ export function loginUser(username, password) {
     token,
     user: sanitizeUser(matchedUser),
   };
+}
+
+/**
+ * Ghi nhận sự kiện Đăng xuất (Logout) của học sinh
+ */
+export function logoutUser(userId, clientMeta = {}) {
+  const db = getDb();
+  if (!userId) return;
+  try {
+    db.prepare(`
+      UPDATE users
+      SET last_logout_at = datetime('now'),
+          last_seen_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(userId);
+
+    // Đóng phiên đăng nhập gần nhất
+    const lastSession = db.prepare(`
+      SELECT id, login_at FROM user_login_logs
+      WHERE user_id = ? AND logout_at IS NULL
+      ORDER BY id DESC LIMIT 1
+    `).get(userId);
+
+    if (lastSession) {
+      db.prepare(`
+        UPDATE user_login_logs
+        SET logout_at = datetime('now'),
+            last_active_at = datetime('now'),
+            duration_seconds = MAX(60, CAST((strftime('%s', 'now') - strftime('%s', login_at)) AS INTEGER))
+        WHERE id = ?
+      `).run(lastSession.id);
+    }
+
+    db.prepare(`
+      INSERT INTO student_activity_logs (user_id, action_type, details, ip_address)
+      VALUES (?, 'LOGOUT', 'Đăng xuất khỏi hệ thống', ?)
+    `).run(userId, clientMeta.ip || '');
+  } catch (err) {
+    console.warn('[Logout Audit Log Warning]:', err.message);
+  }
+}
+
+/**
+ * Ghi nhận tín hiệu nhịp tim (Heartbeat) định kỳ 60s để tính thời lượng online chính xác
+ */
+export function recordHeartbeat(userId) {
+  const db = getDb();
+  if (!userId) return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 1. Cập nhật bảng users
+    db.prepare(`
+      UPDATE users
+      SET last_seen_at = datetime('now'),
+          total_online_seconds = COALESCE(total_online_seconds, 0) + 60,
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(userId);
+
+    // 2. Cập nhật bảng learning_activities của ngày hôm nay
+    db.prepare(`
+      INSERT INTO learning_activities (user_id, activity_date, online_seconds_today)
+      VALUES (?, ?, 60)
+      ON CONFLICT(user_id, activity_date)
+      DO UPDATE SET online_seconds_today = COALESCE(online_seconds_today, 0) + 60,
+                    updated_at = datetime('now')
+    `).run(userId, today);
+
+    // 3. Cập nhật phiên đăng nhập gần nhất
+    const lastSession = db.prepare(`
+      SELECT id, login_at, duration_seconds FROM user_login_logs
+      WHERE user_id = ? AND logout_at IS NULL
+      ORDER BY id DESC LIMIT 1
+    `).get(userId);
+
+    if (lastSession) {
+      db.prepare(`
+        UPDATE user_login_logs
+        SET last_active_at = datetime('now'),
+            duration_seconds = COALESCE(duration_seconds, 0) + 60
+        WHERE id = ?
+      `).run(lastSession.id);
+    }
+  } catch (err) {
+    console.warn('[Heartbeat Log Warning]:', err.message);
+  }
 }
 
 /**
@@ -176,16 +296,18 @@ export function registerStudent({ fullName, username, password, className, nickn
     throw new Error('Username này đã được sử dụng. Vui lòng chọn username khác.');
   }
 
-  const passwordHash = hashPassword(cleanPassword.trim());
+  const rawPwd = cleanPassword.trim();
+  const passwordHash = hashPassword(rawPwd);
   const studentRole = db.prepare("SELECT id FROM roles WHERE name = 'STUDENT'").get();
   const roleId = studentRole ? studentRole.id : 2;
 
   const info = db.prepare(`
-    INSERT INTO users (username, password_hash, full_name, nickname, class_name, role_id, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
+    INSERT INTO users (username, password_hash, plain_password, full_name, nickname, class_name, role_id, status, last_login_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', datetime('now'), datetime('now'))
   `).run(
     cleanUsername,
     passwordHash,
+    rawPwd,
     cleanName,
     nickname ? String(nickname).trim() : cleanName,
     className ? String(className).trim() : '12A1',
@@ -198,6 +320,19 @@ export function registerStudent({ fullName, username, password, className, nickn
     JOIN roles r ON u.role_id = r.id
     WHERE u.id = ?
   `).get(info.lastInsertRowid);
+
+  // Ghi nhật ký đăng ký & phiên login đầu tiên
+  try {
+    db.prepare(`
+      INSERT INTO user_login_logs (user_id, login_at, last_active_at, device_type)
+      VALUES (?, datetime('now'), datetime('now'), 'Web')
+    `).run(newUser.id);
+
+    db.prepare(`
+      INSERT INTO student_activity_logs (user_id, action_type, details)
+      VALUES (?, 'REGISTER', 'Học sinh đăng ký tài khoản thành công')
+    `).run(newUser.id);
+  } catch {}
 
   const token = signJwt({
     userId: newUser.id,
@@ -225,9 +360,14 @@ export function sanitizeUser(user) {
     className: user.class_name,
     role: user.role_name || (user.role_id === 1 ? 'ADMIN' : 'STUDENT'),
     status: user.status,
+    plainPassword: user.plain_password || null,
     streakDays: user.streak_days || 0,
     bestStreakDays: user.best_streak_days || 0,
     lastActiveDate: user.last_active_date,
+    lastLoginAt: user.last_login_at || null,
+    lastLogoutAt: user.last_logout_at || null,
+    lastSeenAt: user.last_seen_at || null,
+    totalOnlineSeconds: user.total_online_seconds || 0,
     createdAt: user.created_at,
   };
 }

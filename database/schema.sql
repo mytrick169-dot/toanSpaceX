@@ -18,12 +18,17 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   full_name VARCHAR(200) NOT NULL,
   nickname VARCHAR(100),
+  plain_password VARCHAR(200),
   class_name VARCHAR(50) DEFAULT '12A1',
   role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
   status VARCHAR(30) DEFAULT 'ACTIVE', -- 'ACTIVE' | 'LOCKED'
   streak_days INTEGER DEFAULT 0,
   best_streak_days INTEGER DEFAULT 0,
   last_active_date VARCHAR(20),
+  last_login_at TIMESTAMP,
+  last_logout_at TIMESTAMP,
+  last_seen_at TIMESTAMP,
+  total_online_seconds INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
