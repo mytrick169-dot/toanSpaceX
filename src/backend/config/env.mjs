@@ -57,11 +57,11 @@ export const ENV = {
   },
   get GEMINI_MODEL() {
     const latestFile = loadEnvFile();
-    return process.env.GEMINI_MODEL || latestFile.GEMINI_MODEL || 'gemini-2.5-pro';
+    return process.env.GEMINI_MODEL || latestFile.GEMINI_MODEL || 'gemini-3.8-flash';
   },
   get GEMINI_FALLBACK_MODEL() {
     const latestFile = loadEnvFile();
-    return process.env.GEMINI_FALLBACK_MODEL || latestFile.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+    return process.env.GEMINI_FALLBACK_MODEL || latestFile.GEMINI_FALLBACK_MODEL || 'gemini-flash-latest';
   },
   GEMINI_REQUESTED_TARGET: getEnv('GEMINI_REQUESTED_TARGET', 'gemini-4-argon'),
   GEMINI_API_BASE_URL: getEnv('GEMINI_API_BASE_URL', 'https://generativelanguage.googleapis.com'),

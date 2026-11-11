@@ -318,7 +318,7 @@ async function callGeminiWithRetry({ pdfBuffer, fileName, extractedText, pageIma
   const primaryModel = ENV.GEMINI_MODEL;
   const fallbackModel = ENV.GEMINI_FALLBACK_MODEL;
   const modelsToTry = Array.from(
-    new Set([primaryModel, fallbackModel, 'gemini-2.5-flash', 'gemini-2.5-pro'].filter(Boolean))
+    new Set([primaryModel, fallbackModel, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-pro'].filter(Boolean))
   );
 
   let uploadMethod = 'inline_data';
