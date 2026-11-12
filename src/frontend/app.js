@@ -729,7 +729,7 @@ async function handleRouteChange() {
 
     if (routePath === '#/admin/curriculum') {
       AppState.curriculum = await apiFetch('/api/curriculum');
-      renderAppShell(renderAdminCurriculumView(AppState.curriculum), routePath);
+      renderAppShell(renderAdminCurriculumView(AppState.curriculum, queryParams.get('subjectId')), routePath);
       return;
     }
 
@@ -740,12 +740,17 @@ async function handleRouteChange() {
         apiFetch('/api/admin/pdfs'),
       ]);
       AppState.curriculum = curr;
+      const qSubjectId = queryParams.get('subjectId') || '';
       const qChapterId = queryParams.get('chapterId') || '';
       const qLessonId = queryParams.get('lessonId') || '';
       const foundLesson = qLessonId
         ? (curr.rawLessons || []).find((l) => Number(l.id) === Number(qLessonId))
         : null;
+      const foundChapter = (qChapterId || foundLesson?.chapter_id)
+        ? (curr.rawChapters || []).find((c) => Number(c.id) === Number(qChapterId || foundLesson?.chapter_id))
+        : null;
       const prefill = {
+        subjectId: qSubjectId || foundChapter?.subject_id || '',
         chapterId: qChapterId || foundLesson?.chapter_id || '',
         lessonId: qLessonId,
         title: foundLesson ? `BTVN - ${foundLesson.name}` : '',
@@ -2016,8 +2021,28 @@ window.SpaceXApp = {
   },
 
   // ---------------- CẤU HÌNH GEMINI AI & UPLOAD PDF TỰ ĐỘNG TẠO ĐỀ ----------------
-  jumpToUploadForLesson(chapterId, lessonId) {
-    navigate(`#/admin/pdf-upload?chapterId=${chapterId}&lessonId=${lessonId}`);
+  jumpToUploadForLesson(chapterId, lessonId, subjectId) {
+    navigate(
+      `#/admin/pdf-upload?chapterId=${chapterId}&lessonId=${lessonId}${
+        subjectId ? `&subjectId=${subjectId}` : ''
+      }`
+    );
+  },
+
+  onUploadSubjectChange(subjectId) {
+    const chapterSelect = document.getElementById('upload-chapter-id');
+    if (!chapterSelect) return;
+    const rawChapters = AppState.curriculum?.rawChapters || [];
+    const filteredChapters = rawChapters.filter((c) => Number(c.subject_id) === Number(subjectId));
+    chapterSelect.innerHTML = filteredChapters
+      .map((c) => `<option value="${c.id}">${c.name}</option>`)
+      .join('');
+    if (filteredChapters.length > 0) {
+      this.onUploadChapterChange(filteredChapters[0].id);
+    } else {
+      const lessonSelect = document.getElementById('upload-lesson-id');
+      if (lessonSelect) lessonSelect.innerHTML = '<option value="">-- Chọn Phần / Tiết học --</option>';
+    }
   },
 
   onUploadChapterChange(chapterId) {
@@ -2382,6 +2407,10 @@ Quy tắc bắt buộc:
           const questionsList = Array.isArray(parsed.questions) ? parsed.questions : [];
 
           for (const q of questionsList) {
+            // Khi Gemini đã tạo hình vẽ vector SVG đẹp rồi, KHÔNG CẦN chụp/cắt màn hình ảnh gốc nữa
+            if (q.svg_diagram && String(q.svg_diagram).trim().length > 30) {
+              continue;
+            }
             const imgInfo = q.images?.[0];
             if (imgInfo && Array.isArray(imgInfo.bbox) && imgInfo.bbox.length === 4) {
               const pageNum = Math.min(Math.max(1, Number(imgInfo.page || 1)), pdfDoc.numPages);

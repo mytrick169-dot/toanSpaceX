@@ -384,8 +384,11 @@ export function renderStudentSubjectsView(curriculum) {
  */
 export function renderStudentChaptersView(curriculum, selectedSubjectId = null) {
   const subjects = curriculum?.subjects || [];
-  const filteredSubjects = selectedSubjectId
-    ? subjects.filter((s) => s.id === Number(selectedSubjectId))
+  const activeSubject = selectedSubjectId
+    ? subjects.find((s) => s.id === Number(selectedSubjectId))
+    : null;
+  const filteredSubjects = activeSubject
+    ? [activeSubject]
     : subjects;
 
   const groupLessonsBySection = (lessons = []) => {
@@ -403,20 +406,63 @@ export function renderStudentChaptersView(curriculum, selectedSubjectId = null) 
     return groups;
   };
 
+  const titleText = activeSubject
+    ? `Lộ trình Chương & Bài học ${activeSubject.name}`
+    : 'Lộ trình Chương & Bài học Toán THPT';
+  const subtitleText = activeSubject
+    ? `${activeSubject.name} (Khối lớp ${activeSubject.grade} • ${activeSubject.chapters?.length || 0} Chương / Chuyên đề lớn)`
+    : 'Hệ thống Chương & Tiết học Toán 11 & Toán 12 theo phân phối chương trình';
+
   return `
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div class="text-xs text-blue-600 font-semibold mb-1">
-            Toán học 12 THPT → 12 Chương & Chuyên đề → Chọn Phần / Tiết học → Luyện tập
+            ${activeSubject ? `${activeSubject.name} → Chọn Chương & Bài học → Luyện tập` : 'Toán THPT → Chọn Khối lớp & Chương học → Luyện tập'}
           </div>
-          <h1 class="text-2xl font-bold text-slate-900">Lộ trình Chương & Phần học Toán 12</h1>
+          <h1 class="text-2xl font-bold text-slate-900">${titleText}</h1>
           <p class="text-sm text-slate-500 mt-1">
-            Chọn đúng tiết học hoặc đề ôn tập bên dưới để làm bài tập về nhà (BTVN) và đề kiểm tra.
+            ${subtitleText}. Chọn đúng tiết học hoặc đề ôn tập bên dưới để làm bài tập về nhà (BTVN) và đề kiểm tra.
           </p>
         </div>
-        <button onclick="window.SpaceXApp.navigate('#/student/exams')" class="btn btn-secondary">
-          Xem toàn bộ Đề thi & Bài tập
+        <div class="flex items-center gap-2">
+          <button onclick="window.SpaceXApp.navigate('#/student/subjects')" class="btn btn-secondary">
+            ← Đổi Môn học & Khối lớp
+          </button>
+          <button onclick="window.SpaceXApp.navigate('#/student/exams')" class="btn btn-primary">
+            Xem toàn bộ Đề thi
+          </button>
+        </div>
+      </div>
+
+      <!-- Thanh chọn nhanh Môn học / Khối lớp -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        ${subjects
+          .map((s) => {
+            const isCurrent = activeSubject ? s.id === activeSubject.id : false;
+            return `
+            <button
+              onclick="window.SpaceXApp.navigate('#/student/chapters?subjectId=${s.id}')"
+              class="px-4 py-2 text-sm font-bold rounded-lg transition ${
+                isCurrent
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }"
+            >
+              📚 ${s.name} (${s.chapters?.length || 0} chương)
+            </button>
+          `;
+          })
+          .join('')}
+        <button
+          onclick="window.SpaceXApp.navigate('#/student/chapters')"
+          class="px-3 py-2 text-xs font-semibold rounded-lg transition ${
+            !activeSubject
+              ? 'bg-slate-800 text-white shadow'
+              : 'text-slate-500 hover:bg-slate-100'
+          }"
+        >
+          Tất cả khối lớp (${subjects.length})
         </button>
       </div>
 
@@ -738,16 +784,13 @@ export function renderStudentExamTakeView(takeState, currentQuestionIdx = 0) {
                 ${renderMathText(currentQ.content)}
               </div>
 
-              <!-- Hình ảnh, Đồ thị hoặc Bảng biến thiên của câu hỏi -->
+              <!-- Hình ảnh, Đồ thị hoặc Bảng biến thiên của câu hỏi (Ưu tiên hình vector SVG siêu nét từ Gemini, nếu không có mới dùng ảnh cắt) -->
               ${
                 currentQ.svgDiagram
                   ? `<div class="my-4 p-3 bg-slate-50 rounded-xl border border-slate-200 max-w-xl mx-auto">
                        ${currentQ.svgDiagram}
                      </div>`
-                  : ''
-              }
-              ${
-                currentQ.imageUrl
+                  : currentQ.imageUrl
                   ? `<div class="my-4 p-3 bg-slate-50 rounded-xl border border-slate-200 text-center">
                        <img src="${currentQ.imageUrl}" alt="Hình minh họa câu ${currentQ.questionNumber}" class="max-h-72 mx-auto rounded" />
                      </div>`
@@ -1057,9 +1100,10 @@ export function renderStudentResultView(resultData) {
                   ${renderMathText(q.content)}
                 </div>
 
-                ${q.svgDiagram ? `<div class="my-3 max-w-lg">${q.svgDiagram}</div>` : ''}
                 ${
-                  q.imageUrl
+                  q.svgDiagram
+                    ? `<div class="my-3 max-w-lg">${q.svgDiagram}</div>`
+                    : q.imageUrl
                     ? `<div class="my-3"><img src="${q.imageUrl}" class="max-h-60 rounded border" alt="Hình câu hỏi" /></div>`
                     : ''
                 }

@@ -565,8 +565,12 @@ function renderGroupedLessonOptionsHtml(rawLessons = [], chapterId = null, selec
 /**
  * 13. TRANG QUẢN LÝ CHƯƠNG & BÀI HỌC (#/admin/curriculum)
  */
-export function renderAdminCurriculumView(curriculum) {
+export function renderAdminCurriculumView(curriculum, selectedSubjectId = null) {
   const subjects = curriculum?.subjects || [];
+  const activeSubject = selectedSubjectId
+    ? subjects.find((s) => s.id === Number(selectedSubjectId))
+    : null;
+  const filteredSubjects = activeSubject ? [activeSubject] : subjects;
 
   const groupLessonsBySection = (lessons = []) => {
     const groups = [];
@@ -583,11 +587,15 @@ export function renderAdminCurriculumView(curriculum) {
     return groups;
   };
 
+  const headerTitle = activeSubject
+    ? `Lộ trình Chương & Bài học ${activeSubject.name} (${activeSubject.chapters?.length || 0} Chương / Chuyên đề)`
+    : 'Lộ trình Chương & Bài học Toán THPT (Toán 11 & Toán 12)';
+
   return `
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold text-slate-900">Lộ trình Chương & Phần học Toán 12 (12 Chương / Chuyên đề)</h1>
+          <h1 class="text-2xl font-bold text-slate-900">${headerTitle}</h1>
           <p class="text-sm text-slate-500 mt-1">
             Nhấn nút <strong>"📤 Upload PDF vào phần này"</strong> tại bất kỳ dòng nào để tải file PDF đề bài & đáp án vào đúng vị trí đó.
           </p>
@@ -602,7 +610,38 @@ export function renderAdminCurriculumView(curriculum) {
         </div>
       </div>
 
-      ${subjects
+      <!-- Tab chuyển đổi giữa Toán 12 và Toán 11 -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        ${subjects
+          .map((s) => {
+            const isCurrent = activeSubject ? s.id === activeSubject.id : false;
+            return `
+            <button
+              onclick="window.SpaceXApp.navigate('#/admin/curriculum?subjectId=${s.id}')"
+              class="px-4 py-2 text-sm font-bold rounded-lg transition ${
+                isCurrent
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }"
+            >
+              📚 ${s.name} (${s.chapters?.length || 0} chương)
+            </button>
+          `;
+          })
+          .join('')}
+        <button
+          onclick="window.SpaceXApp.navigate('#/admin/curriculum')"
+          class="px-3 py-2 text-xs font-semibold rounded-lg transition ${
+            !activeSubject
+              ? 'bg-slate-800 text-white shadow'
+              : 'text-slate-500 hover:bg-slate-100'
+          }"
+        >
+          Tất cả các Môn (${subjects.length})
+        </button>
+      </div>
+
+      ${filteredSubjects
         .map(
           (subj) => `
         <div class="space-y-6">
@@ -653,7 +692,7 @@ export function renderAdminCurriculumView(curriculum) {
                             </div>
                             <div class="flex items-center gap-2">
                               <button
-                                onclick="window.SpaceXApp.jumpToUploadForLesson(${ch.id}, ${les.id})"
+                                onclick="window.SpaceXApp.jumpToUploadForLesson(${ch.id}, ${les.id}, ${subj.id})"
                                 class="btn btn-primary text-xs py-1 px-3"
                               >
                                 📤 Upload PDF vào phần này
@@ -694,7 +733,9 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
   const rawSubjects = curriculum?.rawSubjects || [];
   const rawChapters = curriculum?.rawChapters || [];
   const rawLessons = curriculum?.rawLessons || [];
-  const selectedChapterId = prefill.chapterId ? Number(prefill.chapterId) : rawChapters[0]?.id || 1;
+  const selectedSubjectId = prefill.subjectId ? Number(prefill.subjectId) : (rawSubjects[0]?.id || 1);
+  const subjectChapters = rawChapters.filter((c) => Number(c.subject_id) === Number(selectedSubjectId));
+  const selectedChapterId = prefill.chapterId ? Number(prefill.chapterId) : (subjectChapters[0]?.id || rawChapters[0]?.id || 1);
   const selectedLessonId = prefill.lessonId ? Number(prefill.lessonId) : null;
   const prefillTitle = prefill.title || '';
 
@@ -876,8 +917,8 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
 
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">Môn học & Khối lớp</label>
-              <select id="upload-subject-id" class="input text-sm">
-                ${rawSubjects.map((s) => `<option value="${s.id}">${s.name}</option>`).join('')}
+              <select id="upload-subject-id" onchange="window.SpaceXApp.onUploadSubjectChange(this.value)" class="input text-sm">
+                ${rawSubjects.map((s) => `<option value="${s.id}" ${Number(selectedSubjectId) === Number(s.id) ? 'selected' : ''}>${s.name}</option>`).join('')}
               </select>
             </div>
 
@@ -896,7 +937,7 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
                 onchange="window.SpaceXApp.onUploadChapterChange(this.value)"
                 class="input text-sm"
               >
-                ${rawChapters
+                ${(subjectChapters.length > 0 ? subjectChapters : rawChapters)
                   .map(
                     (c) =>
                       `<option value="${c.id}" ${Number(selectedChapterId) === Number(c.id) ? 'selected' : ''}>${c.name}</option>`
@@ -1102,6 +1143,8 @@ export function renderAdminExamsView(exams = []) {
                   </div>
                   <h3 class="text-lg font-bold text-slate-900">${ex.title}</h3>
                   <div class="text-xs text-slate-600 flex flex-wrap items-center gap-3">
+                    <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">${ex.subject_name || 'Toán học 12'}</span>
+                    <span>•</span>
                     <span>Chương: <strong>${ex.chapter_name || 'Chưa phân loại'}</strong></span>
                     <span>•</span>
                     <span>Số câu: <strong>${ex.question_count} câu</strong></span>
@@ -1392,9 +1435,10 @@ export function renderAdminExamDetailStudioView(examDetail, attempts = [], curri
                 ${renderMathText(q.content)}
               </div>
 
-              ${q.svgDiagram ? `<div class="my-3 max-w-lg">${q.svgDiagram}</div>` : ''}
               ${
-                q.imageUrl
+                q.svgDiagram
+                  ? `<div class="my-3 max-w-lg">${q.svgDiagram}</div>`
+                  : q.imageUrl
                   ? `<div class="my-3"><img src="${q.imageUrl}" class="max-h-56 rounded border" alt="Hình câu hỏi" /></div>`
                   : ''
               }

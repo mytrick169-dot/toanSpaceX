@@ -2,6 +2,7 @@ import { getDb } from './database.mjs';
 import { hashPassword } from '../services/authService.mjs';
 import { ensureStorageDirs } from '../services/storageService.mjs';
 import { ensureVipCodes, DEFAULT_VIP_CODE_COUNT } from '../services/vipCodeService.mjs';
+import { TOAN_11_CURRICULUM_DATA } from './toan11CurriculumData.mjs';
 
 /**
  * Toàn bộ Cấu trúc Chương trình Toán 12 (12 Chương / Chuyên đề lớn & 148 Phần / Tiết học)
@@ -397,7 +398,11 @@ export const TOAN_12_CURRICULUM_DATA = [
 ];
 
 /**
- * Khởi tạo dữ liệu nền tảng chuẩn (Tài khoản Admin mặc định + Cấu trúc 12 Chương/Chuyên đề Toán 12)
+ * Khởi tạo dữ liệu nền tảng chuẩn:
+ * - Tài khoản Admin mặc định
+ * - Cấu trúc 12 Chương/Chuyên đề Toán 12
+ * - Cấu trúc 13 Chương/Chuyên đề Toán 11
+ * - Kho mã VIP khôi phục tài khoản
  */
 export function ensureSeedData() {
   const db = getDb();
@@ -413,34 +418,42 @@ export function ensureSeedData() {
     `).run(adminHash);
   }
 
-  // 2. Đảm bảo cây chương trình Toán 12 chuẩn 12 Chương / Chuyên đề & 186 Phần học đã được nạp
-  const chCount = db.prepare('SELECT COUNT(*) as c FROM chapters').get().c;
-  const lessonCount = db.prepare('SELECT COUNT(*) as c FROM lessons').get().c;
-  if (chCount < 12 || lessonCount < 180) {
+  // 2. Đảm bảo cây chương trình Toán 12 chuẩn 12 Chương / Chuyên đề đã được nạp
+  const s1 = db.prepare('SELECT id FROM subjects WHERE id = 1').get();
+  const chCount12 = db.prepare('SELECT COUNT(*) as c FROM chapters WHERE subject_id = 1').get()?.c || 0;
+  if (!s1 || chCount12 < 12) {
     rebuildToan12Curriculum();
   }
 
-  // 3. Đảm bảo kho 20 mã VIP khôi phục mật khẩu cho học sinh đã được khởi tạo
+  // 3. Đảm bảo cây chương trình Toán 11 chuẩn 13 Chương / Chuyên đề đã được nạp
+  ensureToan11Curriculum();
+
+  // 4. Đảm bảo kho 20 mã VIP khôi phục mật khẩu cho học sinh đã được khởi tạo
   ensureVipCodes(DEFAULT_VIP_CODE_COUNT);
 }
 
 /**
- * Nạp lại toàn bộ 12 Chương/Chuyên đề và 148 Phần/Tiết học của Toán 12
- * đồng thời giữ nguyên và gắn lại các đề thi đã upload (như Đề Tích vô hướng 2 vectơ).
+ * Nạp lại toàn bộ 12 Chương/Chuyên đề và các Phần/Tiết học của Toán 12 (subject_id = 1)
  */
 export function rebuildToan12Curriculum() {
   const db = getDb();
 
   db.exec('PRAGMA foreign_keys = OFF;');
   try {
-    db.exec('DELETE FROM lessons;');
-    db.exec('DELETE FROM chapters;');
-    db.exec('DELETE FROM subjects;');
+    const s1 = db.prepare('SELECT id FROM subjects WHERE id = 1').get();
+    if (!s1) {
+      db.prepare(`
+        INSERT INTO subjects (id, name, grade, description, order_index)
+        VALUES (1, 'Toán học 12', 12, 'Chương trình Toán lớp 12 THPT & Luyện thi Tốt nghiệp THPT Quốc gia - ĐGNL', 1)
+      `).run();
+    }
 
-    db.prepare(`
-      INSERT INTO subjects (id, name, grade, description, order_index)
-      VALUES (1, 'Toán học 12', 12, 'Chương trình Toán lớp 12 THPT & Luyện thi Tốt nghiệp THPT Quốc gia - ĐGNL', 1)
-    `).run();
+    const oldChapters = db.prepare('SELECT id FROM chapters WHERE subject_id = 1').all();
+    const oldIds = oldChapters.map((c) => c.id);
+    if (oldIds.length > 0) {
+      db.prepare(`DELETE FROM lessons WHERE chapter_id IN (${oldIds.map(() => '?').join(',')})`).run(...oldIds);
+      db.prepare('DELETE FROM chapters WHERE subject_id = 1').run();
+    }
 
     const insertChapter = db.prepare(`
       INSERT INTO chapters (id, subject_id, name, description, order_index)
@@ -503,5 +516,68 @@ export function rebuildToan12Curriculum() {
     db.prepare('UPDATE pdf_documents SET subject_id = 1, chapter_id = 1, lesson_id = 4 WHERE id = 12').run();
   } finally {
     db.exec('PRAGMA foreign_keys = ON;');
+  }
+}
+
+/**
+ * Nạp toàn bộ 13 Chương/Chuyên đề và các Nhóm bài học Toán 11 (subject_id = 2)
+ */
+export function ensureToan11Curriculum() {
+  const db = getDb();
+
+  // 1. Đảm bảo môn học Toán 11 tồn tại
+  let toan11 = db.prepare('SELECT id FROM subjects WHERE id = 2').get();
+  if (!toan11) {
+    db.prepare(`
+      INSERT INTO subjects (id, name, grade, description, order_index)
+      VALUES (2, 'Toán học 11', 11, 'Chương trình Toán lớp 11 THPT & Hệ thống Ôn tập Giữa kì - Cuối kì - Luyện thi sớm 12', 2)
+    `).run();
+  }
+
+  // 2. Kiểm tra số lượng chương của Toán 11
+  const chCount = db.prepare('SELECT COUNT(*) as c FROM chapters WHERE subject_id = 2').get().c;
+  if (chCount < 13) {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    try {
+      const oldChapters = db.prepare('SELECT id FROM chapters WHERE subject_id = 2').all();
+      const oldIds = oldChapters.map((c) => c.id);
+      if (oldIds.length > 0) {
+        db.prepare(`DELETE FROM lessons WHERE chapter_id IN (${oldIds.map(() => '?').join(',')})`).run(...oldIds);
+        db.prepare('DELETE FROM chapters WHERE subject_id = 2').run();
+      }
+
+      const insertChapter = db.prepare(`
+        INSERT INTO chapters (id, subject_id, name, description, order_index)
+        VALUES (?, 2, ?, ?, ?)
+      `);
+
+      const insertLesson = db.prepare(`
+        INSERT INTO lessons (id, chapter_id, name, description, order_index)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+
+      let lessonIdCounter = 1001; // ID bài học Toán 11 bắt đầu từ 1001 để không xung đột với Toán 12
+
+      TOAN_11_CURRICULUM_DATA.forEach((ch, chIdx) => {
+        const chapterId = 101 + chIdx; // ID chương Toán 11 từ 101 đến 113
+        insertChapter.run(chapterId, ch.name, ch.description, chIdx + 1);
+
+        let orderInChapter = 1;
+        for (const grp of ch.groups) {
+          for (const itemTitle of grp.items) {
+            const currentLessonId = lessonIdCounter++;
+            insertLesson.run(
+              currentLessonId,
+              chapterId,
+              itemTitle,
+              grp.groupName,
+              orderInChapter++
+            );
+          }
+        }
+      });
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON;');
+    }
   }
 }
