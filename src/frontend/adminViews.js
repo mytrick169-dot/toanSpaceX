@@ -529,7 +529,7 @@ function renderGroupedLessonOptionsHtml(rawLessons = [], chapterId = null, selec
   const targetChId = Number(chapterId || 0);
   const filtered = targetChId
     ? rawLessons.filter((l) => Number(l.chapter_id) === targetChId)
-    : rawLessons;
+    : [];
 
   const groups = [];
   const map = new Map();
@@ -567,10 +567,10 @@ function renderGroupedLessonOptionsHtml(rawLessons = [], chapterId = null, selec
  */
 export function renderAdminCurriculumView(curriculum, selectedSubjectId = null) {
   const subjects = curriculum?.subjects || [];
-  const activeSubject = selectedSubjectId
-    ? subjects.find((s) => s.id === Number(selectedSubjectId))
-    : null;
-  const filteredSubjects = activeSubject ? [activeSubject] : subjects;
+  const effectiveSubjId = Number(selectedSubjectId) || Number(window.SpaceXApp?.currentSubjectId) || (subjects[0]?.id || 1);
+  const activeSubject = subjects.find((s) => Number(s.id) === effectiveSubjId) || subjects[0];
+  // Tuyệt đối chỉ hiển thị môn được chọn, không bao giờ gom chung 11 và 12
+  const filteredSubjects = activeSubject ? [activeSubject] : [];
 
   const groupLessonsBySection = (lessons = []) => {
     const groups = [];
@@ -587,9 +587,7 @@ export function renderAdminCurriculumView(curriculum, selectedSubjectId = null) 
     return groups;
   };
 
-  const headerTitle = activeSubject
-    ? `Lộ trình Chương & Bài học ${activeSubject.name} (${activeSubject.chapters?.length || 0} Chương / Chuyên đề)`
-    : 'Lộ trình Chương & Bài học Toán THPT (Toán 11 & Toán 12)';
+  const headerTitle = `Lộ trình Chương & Bài học ${activeSubject?.name || 'Toán học'} (${activeSubject?.chapters?.length || 0} Chương / Chuyên đề lớn)`;
 
   return `
     <div class="space-y-6">
@@ -610,35 +608,26 @@ export function renderAdminCurriculumView(curriculum, selectedSubjectId = null) 
         </div>
       </div>
 
-      <!-- Tab chuyển đổi giữa Toán 12 và Toán 11 -->
+      <!-- Tab chuyển đổi giữa Toán 12 và Toán 11 (Tách biệt hoàn toàn, không gộp chung) -->
       <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
         ${subjects
           .map((s) => {
-            const isCurrent = activeSubject ? s.id === activeSubject.id : false;
+            const isCurrent = Number(s.id) === Number(activeSubject?.id);
             return `
             <button
-              onclick="window.SpaceXApp.navigate('#/admin/curriculum?subjectId=${s.id}')"
-              class="px-4 py-2 text-sm font-bold rounded-lg transition ${
+              onclick="window.SpaceXApp.selectSubjectAndNavigateAdmin(${s.id})"
+              class="px-5 py-2.5 text-sm font-bold rounded-xl transition flex items-center gap-2 ${
                 isCurrent
-                  ? 'bg-blue-600 text-white shadow'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }"
             >
-              📚 ${s.name} (${s.chapters?.length || 0} chương)
+              <span>${s.grade === 11 ? '📗' : '📘'}</span>
+              <span>${s.name} (${s.chapters?.length || 0} chương)</span>
             </button>
           `;
           })
           .join('')}
-        <button
-          onclick="window.SpaceXApp.navigate('#/admin/curriculum')"
-          class="px-3 py-2 text-xs font-semibold rounded-lg transition ${
-            !activeSubject
-              ? 'bg-slate-800 text-white shadow'
-              : 'text-slate-500 hover:bg-slate-100'
-          }"
-        >
-          Tất cả các Môn (${subjects.length})
-        </button>
       </div>
 
       ${filteredSubjects
@@ -733,9 +722,26 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
   const rawSubjects = curriculum?.rawSubjects || [];
   const rawChapters = curriculum?.rawChapters || [];
   const rawLessons = curriculum?.rawLessons || [];
-  const selectedSubjectId = prefill.subjectId ? Number(prefill.subjectId) : (rawSubjects[0]?.id || 1);
+
+  // Xác định subjectId chuẩn xác
+  let selectedSubjectId = prefill.subjectId ? Number(prefill.subjectId) : null;
+  if (!selectedSubjectId && prefill.chapterId) {
+    const foundCh = rawChapters.find((c) => Number(c.id) === Number(prefill.chapterId));
+    if (foundCh) selectedSubjectId = Number(foundCh.subject_id);
+  }
+  if (!selectedSubjectId) {
+    selectedSubjectId = Number(window.SpaceXApp?.currentSubjectId) || (rawSubjects[0]?.id || 1);
+  }
+
+  // Lọc chỉ lấy các chương thuộc duy nhất Môn học này (Toán 11 hoặc Toán 12 riêng biệt)
   const subjectChapters = rawChapters.filter((c) => Number(c.subject_id) === Number(selectedSubjectId));
-  const selectedChapterId = prefill.chapterId ? Number(prefill.chapterId) : (subjectChapters[0]?.id || rawChapters[0]?.id || 1);
+
+  // Kiểm tra chapterId hợp lệ trong môn học này
+  const isPrefillInSubject = subjectChapters.some((c) => Number(c.id) === Number(prefill.chapterId));
+  const selectedChapterId = isPrefillInSubject
+    ? Number(prefill.chapterId)
+    : (subjectChapters[0]?.id || null);
+
   const selectedLessonId = prefill.lessonId ? Number(prefill.lessonId) : null;
   const prefillTitle = prefill.title || '';
 
@@ -937,7 +943,7 @@ export function renderAdminPdfUploadView(aiStatus, curriculum, existingPdfs = []
                 onchange="window.SpaceXApp.onUploadChapterChange(this.value)"
                 class="input text-sm"
               >
-                ${(subjectChapters.length > 0 ? subjectChapters : rawChapters)
+                ${subjectChapters
                   .map(
                     (c) =>
                       `<option value="${c.id}" ${Number(selectedChapterId) === Number(c.id) ? 'selected' : ''}>${c.name}</option>`
@@ -1266,6 +1272,7 @@ export function renderAdminExamDetailStudioView(examDetail, attempts = [], curri
               class="input text-sm"
             >
               ${rawChapters
+                .filter((c) => !examDetail.subject_id || Number(c.subject_id) === Number(examDetail.subject_id))
                 .map(
                   (c) =>
                     `<option value="${c.id}" ${examDetail.chapter_id === c.id ? 'selected' : ''}>${c.name}</option>`

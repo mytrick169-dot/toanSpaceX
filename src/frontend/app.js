@@ -651,8 +651,10 @@ async function handleRouteChange() {
 
     if (routePath === '#/student/chapters') {
       AppState.curriculum = await apiFetch('/api/curriculum');
+      const subjId = queryParams.get('subjectId') || AppState.currentSubjectId || 1;
+      AppState.currentSubjectId = Number(subjId);
       renderAppShell(
-        renderStudentChaptersView(AppState.curriculum, queryParams.get('subjectId')),
+        renderStudentChaptersView(AppState.curriculum, AppState.currentSubjectId),
         routePath
       );
       return;
@@ -729,7 +731,9 @@ async function handleRouteChange() {
 
     if (routePath === '#/admin/curriculum') {
       AppState.curriculum = await apiFetch('/api/curriculum');
-      renderAppShell(renderAdminCurriculumView(AppState.curriculum, queryParams.get('subjectId')), routePath);
+      const subjId = queryParams.get('subjectId') || AppState.currentSubjectId || 1;
+      AppState.currentSubjectId = Number(subjId);
+      renderAppShell(renderAdminCurriculumView(AppState.curriculum, AppState.currentSubjectId), routePath);
       return;
     }
 
@@ -749,8 +753,10 @@ async function handleRouteChange() {
       const foundChapter = (qChapterId || foundLesson?.chapter_id)
         ? (curr.rawChapters || []).find((c) => Number(c.id) === Number(qChapterId || foundLesson?.chapter_id))
         : null;
+      const resolvedSubjectId = qSubjectId || foundChapter?.subject_id || AppState.currentSubjectId || 1;
+      AppState.currentSubjectId = Number(resolvedSubjectId);
       const prefill = {
-        subjectId: qSubjectId || foundChapter?.subject_id || '',
+        subjectId: AppState.currentSubjectId,
         chapterId: qChapterId || foundLesson?.chapter_id || '',
         lessonId: qLessonId,
         title: foundLesson ? `BTVN - ${foundLesson.name}` : '',
@@ -2020,8 +2026,20 @@ window.SpaceXApp = {
     }
   },
 
+  // ---------------- ĐIỀU HƯỚNG MÔN HỌC & KHỐI LỚP (TOÁN 11 & TOÁN 12) ----------------
+  selectSubjectAndNavigate(subjectId) {
+    AppState.currentSubjectId = Number(subjectId);
+    navigate(`#/student/chapters?subjectId=${subjectId}`);
+  },
+
+  selectSubjectAndNavigateAdmin(subjectId) {
+    AppState.currentSubjectId = Number(subjectId);
+    navigate(`#/admin/curriculum?subjectId=${subjectId}`);
+  },
+
   // ---------------- CẤU HÌNH GEMINI AI & UPLOAD PDF TỰ ĐỘNG TẠO ĐỀ ----------------
   jumpToUploadForLesson(chapterId, lessonId, subjectId) {
+    if (subjectId) AppState.currentSubjectId = Number(subjectId);
     navigate(
       `#/admin/pdf-upload?chapterId=${chapterId}&lessonId=${lessonId}${
         subjectId ? `&subjectId=${subjectId}` : ''
@@ -2030,6 +2048,7 @@ window.SpaceXApp = {
   },
 
   onUploadSubjectChange(subjectId) {
+    AppState.currentSubjectId = Number(subjectId);
     const chapterSelect = document.getElementById('upload-chapter-id');
     if (!chapterSelect) return;
     const rawChapters = AppState.curriculum?.rawChapters || [];
@@ -2242,12 +2261,13 @@ window.SpaceXApp = {
       await new Promise((r) => setTimeout(r, 250));
       highlightStep(6);
 
+      const curSubj = Number(document.getElementById('upload-subject-id')?.value || 1);
       const payload = {
         pdfBase64: AppState.selectedPdfBase64,
-        fileName: AppState.selectedPdfName || 'De_Thi_Toan_12.pdf',
+        fileName: AppState.selectedPdfName || (curSubj === 2 ? 'De_Thi_Toan_11.pdf' : 'De_Thi_Toan_12.pdf'),
         clientExtractedText: AppState.selectedPdfExtractedText || '',
         title: document.getElementById('upload-exam-title')?.value || '',
-        subjectId: document.getElementById('upload-subject-id')?.value || 1,
+        subjectId: curSubj,
         examType: document.getElementById('upload-exam-type')?.value || 'EXAM',
         chapterId: document.getElementById('upload-chapter-id')?.value || null,
         lessonId: document.getElementById('upload-lesson-id')?.value || null,

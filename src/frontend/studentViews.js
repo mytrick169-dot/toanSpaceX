@@ -366,7 +366,7 @@ export function renderStudentSubjectsView(curriculum) {
             </div>
 
             <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
-              <button onclick="window.SpaceXApp.navigate('#/student/chapters?subjectId=${s.id}')" class="btn btn-primary w-full">
+              <button onclick="window.SpaceXApp.selectSubjectAndNavigate(${s.id})" class="btn btn-primary w-full">
                 Khám phá các Chương & Bài học →
               </button>
             </div>
@@ -384,12 +384,11 @@ export function renderStudentSubjectsView(curriculum) {
  */
 export function renderStudentChaptersView(curriculum, selectedSubjectId = null) {
   const subjects = curriculum?.subjects || [];
-  const activeSubject = selectedSubjectId
-    ? subjects.find((s) => s.id === Number(selectedSubjectId))
-    : null;
-  const filteredSubjects = activeSubject
-    ? [activeSubject]
-    : subjects;
+  // Xác định chính xác môn học được chọn: ưu tiên query param -> bộ nhớ ứng dụng -> môn đầu tiên
+  const effectiveSubjId = Number(selectedSubjectId) || Number(window.SpaceXApp?.currentSubjectId) || (subjects[0]?.id || 1);
+  const activeSubject = subjects.find((s) => Number(s.id) === effectiveSubjId) || subjects[0];
+  // TUYỆT ĐỐI CHỈ hiển thị duy nhất môn học được chọn, không bao giờ lẫn môn khác!
+  const filteredSubjects = activeSubject ? [activeSubject] : [];
 
   const groupLessonsBySection = (lessons = []) => {
     const groups = [];
@@ -406,19 +405,15 @@ export function renderStudentChaptersView(curriculum, selectedSubjectId = null) 
     return groups;
   };
 
-  const titleText = activeSubject
-    ? `Lộ trình Chương & Bài học ${activeSubject.name}`
-    : 'Lộ trình Chương & Bài học Toán THPT';
-  const subtitleText = activeSubject
-    ? `${activeSubject.name} (Khối lớp ${activeSubject.grade} • ${activeSubject.chapters?.length || 0} Chương / Chuyên đề lớn)`
-    : 'Hệ thống Chương & Tiết học Toán 11 & Toán 12 theo phân phối chương trình';
+  const titleText = `Lộ trình Chương & Bài học ${activeSubject?.name || 'Toán học'}`;
+  const subtitleText = `${activeSubject?.name || 'Môn học'} (Khối lớp ${activeSubject?.grade || 12} • ${activeSubject?.chapters?.length || 0} Chương / Chuyên đề lớn)`;
 
   return `
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div class="text-xs text-blue-600 font-semibold mb-1">
-            ${activeSubject ? `${activeSubject.name} → Chọn Chương & Bài học → Luyện tập` : 'Toán THPT → Chọn Khối lớp & Chương học → Luyện tập'}
+          <div class="text-xs text-blue-600 font-bold mb-1">
+            ${activeSubject?.name} THPT → ${activeSubject?.chapters?.length || 0} Chương & Chuyên đề lớn → Chọn Tiết học → Làm bài
           </div>
           <h1 class="text-2xl font-bold text-slate-900">${titleText}</h1>
           <p class="text-sm text-slate-500 mt-1">
@@ -435,35 +430,26 @@ export function renderStudentChaptersView(curriculum, selectedSubjectId = null) 
         </div>
       </div>
 
-      <!-- Thanh chọn nhanh Môn học / Khối lớp -->
+      <!-- Thanh chọn nhanh Môn học / Khối lớp (Tách biệt rõ ràng từng lớp, không gộp chung) -->
       <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
         ${subjects
           .map((s) => {
-            const isCurrent = activeSubject ? s.id === activeSubject.id : false;
+            const isCurrent = Number(s.id) === Number(activeSubject?.id);
             return `
             <button
-              onclick="window.SpaceXApp.navigate('#/student/chapters?subjectId=${s.id}')"
-              class="px-4 py-2 text-sm font-bold rounded-lg transition ${
+              onclick="window.SpaceXApp.selectSubjectAndNavigate(${s.id})"
+              class="px-5 py-2.5 text-sm font-bold rounded-xl transition flex items-center gap-2 ${
                 isCurrent
-                  ? 'bg-blue-600 text-white shadow'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }"
             >
-              📚 ${s.name} (${s.chapters?.length || 0} chương)
+              <span>${s.grade === 11 ? '📗' : '📘'}</span>
+              <span>${s.name} (${s.chapters?.length || 0} chương)</span>
             </button>
           `;
           })
           .join('')}
-        <button
-          onclick="window.SpaceXApp.navigate('#/student/chapters')"
-          class="px-3 py-2 text-xs font-semibold rounded-lg transition ${
-            !activeSubject
-              ? 'bg-slate-800 text-white shadow'
-              : 'text-slate-500 hover:bg-slate-100'
-          }"
-        >
-          Tất cả khối lớp (${subjects.length})
-        </button>
       </div>
 
       ${filteredSubjects
